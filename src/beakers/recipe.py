@@ -158,7 +158,7 @@ class Recipe:
         # sqlite upsert
         cursor = self.db.cursor()
         cursor.execute(
-            "INSERT INTO _metadata (table_name, data) VALUES (?, ?) ON CONFLICT(table_name) DO UPDATE SET data = ?",
+            "INSERT INTO _metadata (table_name, data) VALUES (?, ?) ON CONFLICT(table_name) DO UPDATE SET data = ?",  # noqa
             (table_name, data_json, data_json),
         )
         self.db.commit()
@@ -285,9 +285,10 @@ class Recipe:
 
                 # convert coroutine to function
                 if inspect.iscoroutinefunction(transform.transform_func):
-                    t_func = lambda x: loop.run_until_complete(
-                        transform.transform_func(x)
-                    )
+
+                    def t_func(x):
+                        return loop.run_until_complete(transform.transform_func(x))
+
                 else:
                     t_func = transform.transform_func
 

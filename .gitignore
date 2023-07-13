@@ -1,0 +1,8 @@
+*.pyc
+poetry.lock
+.vscode
+env.sh
+dist
+site
+htmlcov
+.coverage

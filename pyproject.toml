@@ -23,6 +23,11 @@ structlog = "^23.1.0"
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
 mypy = "^1.4.1"
+ruff = "^0.0.278"
+pytest-cov = "^4.1.0"
+
+[tool.ruff]
+line-length = 100
 
 [build-system]
 requires = ["poetry-core"]
