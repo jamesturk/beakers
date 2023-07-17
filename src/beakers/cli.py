@@ -101,16 +101,10 @@ def run(
     start: Optional[str] = typer.Option(None),
     end: Optional[str] = typer.Option(None),
 ) -> None:
-    if ctx.obj.seeds:
-        typer.secho("Seeding beakers", fg=typer.colors.GREEN)
-        ctx.obj.process_seeds()
     has_data = any(ctx.obj.beakers.values())
     if not input and not has_data:
-        typer.secho("No data; pass --input to seed beaker(s)", fg=typer.colors.RED)
+        typer.secho("No data! Run seed(s) first.", fg=typer.colors.RED)
         raise typer.Exit(1)
-    for input_str in input or []:
-        beaker, filename = input_str.split("=")
-        ctx.obj.csv_to_beaker(filename, beaker)
     ctx.obj.run_once(start, end)
 
 

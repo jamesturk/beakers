@@ -240,6 +240,8 @@ class Recipe:
     def run_once(
         self, start_beaker: str | None = None, end_beaker: str | None = None
     ) -> None:
+        # TODO: produce a run report for printing statistics
+
         log.info("run_once", recipe=self)
         loop = asyncio.get_event_loop()
 

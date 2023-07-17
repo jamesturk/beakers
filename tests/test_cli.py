@@ -69,3 +69,19 @@ normalized (0)
 fruit (0)
 """
     )
+
+
+def test_run_no_data():
+    fruits.reset()
+    result = runner.invoke(app, ["--recipe", "tests.testdata.fruits", "run"])
+    assert result.output == "No data! Run seed(s) first.\n"
+    assert result.exit_code == 1
+
+
+def test_run_simple():
+    fruits.reset()
+    runner.invoke(app, ["--recipe", "tests.testdata.fruits", "seed", "abc"])
+    result = runner.invoke(app, ["--recipe", "tests.testdata.fruits", "run"])
+    assert "transform" in result.output
+    assert "is_fruit" in result.output
+    assert result.exit_code == 0
