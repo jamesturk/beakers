@@ -5,7 +5,7 @@ import uuid
 from pydantic import BaseModel
 from typing import Iterable, Type, TYPE_CHECKING
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from .recipe import Recipe
 
 PydanticModel = Type[BaseModel]
@@ -18,23 +18,31 @@ class Beaker(abc.ABC):
         self.recipe = recipe
 
     def __repr__(self) -> str:
-        return f"Beaker({self.name}, {self.model.__name__})"
+        return f"{self.__class__.__name__}({self.name}, {self.model.__name__})"
 
     @abc.abstractmethod
     def items(self) -> Iterable[tuple[str, BaseModel]]:
-        pass
+        """
+        Return list of items in the beaker.
+        """
 
     @abc.abstractmethod
     def __len__(self) -> int:
-        pass
+        """
+        Return number of items in the beaker.
+        """
 
     @abc.abstractmethod
     def add_item(self, item: BaseModel, id: str | None = None) -> None:
-        pass
+        """
+        Add an item to the beaker, with an optional id.
+        """
 
     @abc.abstractmethod
     def reset(self) -> None:
-        pass
+        """
+        Reset the beaker to empty.
+        """
 
     def add_items(self, items: Iterable[BaseModel]) -> None:
         for item in items:

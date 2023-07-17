@@ -1,7 +1,6 @@
 import typer
 import inspect
 import sqlite3
-import hashlib
 import asyncio
 import networkx  # type: ignore
 from collections import defaultdict, Counter
@@ -13,11 +12,6 @@ from .beakers import Beaker, SqliteBeaker, TempBeaker
 from .exceptions import SeedError
 
 log = get_logger()
-
-
-def get_sha512(filename: str) -> str:
-    with open(filename, "rb") as file:
-        return hashlib.sha512(file.read()).hexdigest()
 
 
 class Transform(BaseModel):
@@ -82,7 +76,7 @@ class Recipe:
         self,
         name: str,
         datatype: Type[BaseModel],
-        beaker_type: Type[Beaker] = SqliteBeaker,
+        # beaker_type: Type[Beaker] = SqliteBeaker,
     ) -> Beaker:
         self.graph.add_node(name, datatype=datatype)
         if datatype is None:
@@ -208,12 +202,11 @@ class Recipe:
             cursor.execute("DELETE FROM _seeds")
             typer.secho("seeds reset", fg=typer.colors.RED)
             for beaker in self.beakers.values():
-                if isinstance(beaker, SqliteBeaker):
-                    if bl := len(beaker):
-                        beaker.reset()
-                        typer.secho(f"{beaker.name} reset ({bl})", fg=typer.colors.RED)
-                    else:
-                        typer.secho(f"{beaker.name} empty", fg=typer.colors.GREEN)
+                if bl := len(beaker):
+                    beaker.reset()
+                    typer.secho(f"{beaker.name} reset ({bl})", fg=typer.colors.RED)
+                else:
+                    typer.secho(f"{beaker.name} empty", fg=typer.colors.GREEN)
 
     def show(self) -> None:
         seed_count = Counter(self.seeds.keys())
@@ -230,7 +223,7 @@ class Recipe:
                     fg=typer.colors.GREEN if node["len"] else typer.colors.YELLOW,
                 )
             for edge in node["edges"]:
-                print(f"  -({edge['transform'].name})-> {edge['to_beaker']}")
+                typer.secho(f"  -({edge['transform'].name})-> {edge['to_beaker']}")
                 for k, v in edge["transform"].error_map.items():
                     if isinstance(k, tuple):
                         typer.secho(
@@ -245,11 +238,10 @@ class Recipe:
 
         for node in networkx.topological_sort(self.graph):
             beaker = self.beakers[node]
-            temp = isinstance(beaker, TempBeaker)
 
             nodes[node] = {
                 "name": node,
-                "temp": temp,
+                "temp": isinstance(beaker, TempBeaker),
                 "len": len(beaker),
                 "edges": [],
             }

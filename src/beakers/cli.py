@@ -1,12 +1,11 @@
 import importlib
-from types import SimpleNamespace
 import typer
 import sys
+from types import SimpleNamespace
 from pprint import pprint
 from typing import List, Optional
 from typing_extensions import Annotated
 
-from beakers.beakers import SqliteBeaker
 from beakers.exceptions import SeedError
 
 app = typer.Typer()
