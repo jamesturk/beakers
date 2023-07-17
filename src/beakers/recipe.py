@@ -1,5 +1,6 @@
 import csv
 import json
+from beakers.exceptions import SeedError
 import typer
 import inspect
 import sqlite3
@@ -12,6 +13,7 @@ from pydantic import BaseModel, ConfigDict
 from structlog import get_logger
 
 from .beakers import Beaker, SqliteBeaker, TempBeaker
+from .exceptions import SeedError
 
 log = get_logger()
 
@@ -27,6 +29,18 @@ class Transform(BaseModel):
     name: str
     transform_func: Callable
     error_map: dict[tuple, str]
+
+
+class Seed(BaseModel):
+    name: str
+    num_items: int = 0
+    imported_at: str | None = None
+
+    def __str__(self):
+        if self.imported_at:
+            return f"{self.name} ({self.num_items} items imported at {self.imported_at})"
+        else:
+            return f"{self.name}"
 
 
 class ErrorType(BaseModel):
@@ -48,11 +62,16 @@ class Recipe:
         self.name = name
         self.graph = networkx.DiGraph()
         self.beakers: dict[str, Beaker] = {}
-        self.seeds: defaultdict[str, list[Iterable[BaseModel]]] = defaultdict(list)
+        self.seeds: dict[str, tuple[str, Callable[[], Iterable[BaseModel]]]] = {}
         self.db = sqlite3.connect(db_name)
         cursor = self.db.cursor()
         cursor.execute(
-            "CREATE TABLE IF NOT EXISTS _metadata (table_name TEXT PRIMARY KEY, data JSON)"
+            """CREATE TABLE IF NOT EXISTS _seeds (
+                name TEXT, 
+                beaker_name TEXT,
+                num_items INTEGER,
+                imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )"""
         )
 
     def __repr__(self) -> str:
@@ -129,66 +148,52 @@ class Recipe:
                 if_cond_false,
             )
 
-    def add_seed(self, beaker_name: str, data: Iterable[BaseModel]) -> None:
-        self.seeds[beaker_name].append(data)
+    def add_seed(self, seed_name: str, beaker_name: str, seed_func: Callable[[], Iterable[BaseModel]]) -> None:
+        self.seeds[seed_name] = (beaker_name, seed_func)
 
-    def process_seeds(self) -> None:
-        log.info("process_seeds", recipe=self.name)
-        for beaker_name, seeds in self.seeds.items():
-            for seed in seeds:
-                self.beakers[beaker_name].add_items(seed)
-
-    def get_metadata(self, table_name: str) -> dict:
+    def list_seeds(self) -> dict[str, list[str]]:
+        by_beaker = defaultdict(list)
+        for seed_name, (beaker_name, _) in self.seeds.items():
+            seed = self._db_get_seed(seed_name)
+            if not seed:
+                seed = Seed(name=seed_name)
+            by_beaker[beaker_name].append(seed)
+        return dict(by_beaker)
+    
+    def _db_get_seed(self, seed_name: str) -> Seed | None:
         cursor = self.db.cursor()
+        cursor.row_factory = sqlite3.Row
         cursor.execute(
-            "SELECT data FROM _metadata WHERE table_name = ?",
-            (table_name,),
+            "SELECT * FROM _seeds WHERE name = ?",
+            (seed_name,)
         )
+        if row := cursor.fetchone():
+            return Seed(**row)
+        else:
+            return None
+    
+    def run_seed(self, seed_name: str) -> None:
         try:
-            data = cursor.fetchone()["data"]
-            log.debug("get_metadata", table_name=table_name, data=data)
-            return json.loads(data)
-        except TypeError:
-            log.debug("get_metadata", table_name=table_name, data={})
-            return {}
+            beaker_name, seed_func = self.seeds[seed_name]
+        except KeyError:
+            raise SeedError(f"Seed {seed_name} not found")
+        beaker = self.beakers[beaker_name]
 
-    def save_metadata(self, table_name: str, data: dict) -> None:
-        data_json = json.dumps(data)
-        log.info("save_metadata", table_name=table_name, data=data_json)
-        # sqlite upsert
+        if seed := self._db_get_seed(seed_name):
+            raise SeedError(f"{seed_name} already run at {seed.imported_at}")
+
+        log.info("run_seed", seed_name=seed_name, beaker_name=beaker_name)
+        num_items = 0
+        for item in seed_func():
+            beaker.add_item(item)
+            num_items += 1
+
         cursor = self.db.cursor()
         cursor.execute(
-            "INSERT INTO _metadata (table_name, data) VALUES (?, ?) ON CONFLICT(table_name) DO UPDATE SET data = ?",  # noqa
-            (table_name, data_json, data_json),
+            "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
+            (seed_name, beaker_name, num_items),
         )
         self.db.commit()
-
-    def csv_to_beaker(self, filename: str, beaker_name: str) -> None:
-        beaker = self.beakers[beaker_name]
-        lg = log.bind(beaker=beaker, filename=filename)
-        # three cases: empty, match, mismatch
-        # case 1: empty
-        if len(beaker) == 0:
-            with open(filename, "r") as file:
-                reader = csv.DictReader(file)
-                added = 0
-                for row in reader:
-                    beaker.add_item(beaker.model(**row))
-                    added += 1
-            lg.info("from_csv", case="empty", added=added)
-            meta = self.get_metadata(beaker.name)
-            meta["sha512"] = get_sha512(filename)
-            self.save_metadata(beaker.name, meta)
-        else:
-            old_sha = self.get_metadata(beaker.name).get("sha512")
-            new_sha = get_sha512(filename)
-            if old_sha != new_sha:
-                # case 3: mismatch
-                lg.info("from_csv", case="mismatch", old_sha=old_sha, new_sha=new_sha)
-                raise Exception("sha512 mismatch")
-            else:
-                # case 2: match
-                lg.info("from_csv", case="match")
 
     def show(self) -> None:
         seed_count = Counter(self.seeds.keys())

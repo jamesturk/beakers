@@ -7,6 +7,7 @@ from typing import List, Optional
 from typing_extensions import Annotated
 
 from beakers.beakers import SqliteBeaker
+from beakers.exceptions import SeedError
 
 app = typer.Typer()
 
@@ -52,6 +53,20 @@ def show(ctx: typer.Context) -> None:
 def graph(ctx: typer.Context) -> None:
     pprint(ctx.obj.graph_data())
 
+@app.command()
+def seeds(ctx: typer.Context) -> None:
+    for beaker, seeds in ctx.obj.list_seeds().items():
+        typer.secho(beaker)
+        for seed in seeds:
+            typer.secho(f"  {seed}", fg=typer.colors.GREEN if seed.num_items else typer.colors.YELLOW)
+
+@app.command()
+def seed(ctx: typer.Context, name: str) -> None:
+    try:
+        ctx.obj.run_seed(name)
+    except SeedError as e:
+        typer.secho(f"{e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 @app.command()
 def run(
