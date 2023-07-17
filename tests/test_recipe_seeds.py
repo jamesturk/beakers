@@ -35,9 +35,9 @@ def test_list_seeds_runs(recipe):
 
 
 def test_run_seed_basic(recipe):
-    recipe.run_seed("one")
+    assert recipe.run_seed("one") == 1
     assert len(recipe.beakers["word"]) == 1
-    recipe.run_seed("many")
+    assert recipe.run_seed("many") == 3
     assert len(recipe.beakers["word"]) == 4
 
 
@@ -52,3 +52,12 @@ def test_run_seed_already_run(recipe):
     with pytest.raises(SeedError):
         recipe.run_seed("one")
     assert len(recipe.beakers["word"]) == 1
+
+
+def test_reset_seeds(recipe):
+    recipe.run_seed("one")
+    recipe.run_seed("many")
+    assert len(recipe.beakers["word"]) == 4
+    reset_list = recipe.reset()
+    assert reset_list == ["2 seeds", "word (4)"]
+    assert len(recipe.beakers["word"]) == 0

@@ -1,3 +1,4 @@
+from collections import Counter
 import importlib
 import typer
 import sys
@@ -34,12 +35,37 @@ def main(
 
 @app.command()
 def reset(ctx: typer.Context) -> None:
-    ctx.obj.reset()
+    reset_list = ctx.obj.reset()
+    if not reset_list:
+        typer.secho("Nothing to reset!", fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
+    for item in reset_list:
+        typer.secho(f"Reset {item}", fg=typer.colors.RED)
 
 
 @app.command()
 def show(ctx: typer.Context) -> None:
-    ctx.obj.show()
+    recipe = ctx.obj
+    seed_count = Counter(recipe.seeds.keys())
+    graph_data = recipe.graph_data()
+    for node in graph_data:
+        if node["temp"]:
+            typer.secho(node["name"], fg=typer.colors.CYAN)
+        else:
+            typer.secho(
+                f"{node['name']} ({node['len']})",
+                fg=typer.colors.GREEN if node["len"] else typer.colors.YELLOW,
+            )
+        for edge in node["edges"]:
+            typer.secho(f"  -({edge['transform'].name})-> {edge['to_beaker']}")
+            for k, v in edge["transform"].error_map.items():
+                if isinstance(k, tuple):
+                    typer.secho(
+                        f"    {' '.join(c.__name__ for c in k)} -> {v}",
+                        fg=typer.colors.RED,
+                    )
+                else:
+                    typer.secho(f"    {k.__name__} -> {v}", fg=typer.colors.RED)
 
 
 @app.command()
@@ -61,7 +87,8 @@ def seeds(ctx: typer.Context) -> None:
 @app.command()
 def seed(ctx: typer.Context, name: str) -> None:
     try:
-        ctx.obj.run_seed(name)
+        num_items = ctx.obj.run_seed(name)
+        typer.secho(f"Seeded with {num_items} items", fg=typer.colors.GREEN)
     except SeedError as e:
         typer.secho(f"{e}", fg=typer.colors.RED)
         raise typer.Exit(1)
@@ -87,5 +114,5 @@ def run(
     ctx.obj.run_once(start, end)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     app()

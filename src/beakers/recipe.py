@@ -181,7 +181,6 @@ class Recipe:
         if seed := self._db_get_seed(seed_name):
             raise SeedError(f"{seed_name} already run at {seed.imported_at}")
 
-        log.info("run_seed", seed_name=seed_name, beaker_name=beaker_name)
         num_items = 0
         for item in seed_func():
             beaker.add_item(item)
@@ -193,45 +192,22 @@ class Recipe:
             (seed_name, beaker_name, num_items),
         )
         self.db.commit()
+        return num_items
 
     # section: commands #######################################################
 
-    def reset(self) -> None:
+    def reset(self) -> list[str]:
+        reset_list = []
         with self.db:
             cursor = self.db.cursor()
-            cursor.execute("DELETE FROM _seeds")
-            typer.secho("seeds reset", fg=typer.colors.RED)
+            res = cursor.execute("DELETE FROM _seeds")
+            if res.rowcount:
+                reset_list.append(f"{res.rowcount} seeds")
             for beaker in self.beakers.values():
                 if bl := len(beaker):
                     beaker.reset()
-                    typer.secho(f"{beaker.name} reset ({bl})", fg=typer.colors.RED)
-                else:
-                    typer.secho(f"{beaker.name} empty", fg=typer.colors.GREEN)
-
-    def show(self) -> None:
-        seed_count = Counter(self.seeds.keys())
-        typer.secho("Seeds", fg=typer.colors.GREEN)
-        for beaker, count in seed_count.items():
-            typer.secho(f"  {beaker} ({count})", fg=typer.colors.GREEN)
-        graph_data = self.graph_data()
-        for node in graph_data:
-            if node["temp"]:
-                typer.secho(node["name"], fg=typer.colors.CYAN)
-            else:
-                typer.secho(
-                    f"{node['name']} ({node['len']})",
-                    fg=typer.colors.GREEN if node["len"] else typer.colors.YELLOW,
-                )
-            for edge in node["edges"]:
-                typer.secho(f"  -({edge['transform'].name})-> {edge['to_beaker']}")
-                for k, v in edge["transform"].error_map.items():
-                    if isinstance(k, tuple):
-                        typer.secho(
-                            f"    {' '.join(c.__name__ for c in k)} -> {v}",
-                            fg=typer.colors.RED,
-                        )
-                    else:
-                        typer.secho(f"    {k.__name__} -> {v}", fg=typer.colors.RED)
+                    reset_list.append(f"{beaker.name} ({bl})")
+        return reset_list
 
     def graph_data(self) -> list[dict]:
         nodes = {}

@@ -95,7 +95,6 @@ class SqliteBeaker(Beaker):
     def add_item(self, item: BaseModel, id: str | None = None) -> None:
         if id is None:
             id = str(uuid.uuid1())
-            print("UUID", id, item)
         self.cursor.execute(
             f"INSERT INTO {self.name} (uuid, data) VALUES (?, ?)",
             (id, item.model_dump_json()),
