@@ -4,18 +4,25 @@ from beakers.exceptions import SeedError
 from testdata import Word
 import pytest
 
+
 @pytest.fixture
 def recipe():
     r = Recipe("seed_test", ":memory:")
     r.add_beaker("word", Word)
     r.add_seed("one", "word", lambda: [Word(word="apple")])
-    r.add_seed("many", "word", lambda: [Word(word="banana"), Word(word="orange"), Word(word="pear")])
+    r.add_seed(
+        "many",
+        "word",
+        lambda: [Word(word="banana"), Word(word="orange"), Word(word="pear")],
+    )
     return r
+
 
 def test_list_seeds_no_runs(recipe):
     assert recipe.list_seeds() == {
         "word": [Seed(name="one"), Seed(name="many")],
     }
+
 
 def test_list_seeds_runs(recipe):
     recipe.run_seed("many")
@@ -26,15 +33,18 @@ def test_list_seeds_runs(recipe):
     # 202x
     assert many.imported_at.startswith("202")
 
+
 def test_run_seed_basic(recipe):
     recipe.run_seed("one")
     assert len(recipe.beakers["word"]) == 1
     recipe.run_seed("many")
     assert len(recipe.beakers["word"]) == 4
 
+
 def test_run_seed_bad_name(recipe):
     with pytest.raises(SeedError):
         recipe.run_seed("bad")
+
 
 def test_run_seed_already_run(recipe):
     recipe.run_seed("one")

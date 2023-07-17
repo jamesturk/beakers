@@ -1,6 +1,3 @@
-import csv
-import json
-from beakers.exceptions import SeedError
 import typer
 import inspect
 import sqlite3
@@ -38,7 +35,9 @@ class Seed(BaseModel):
 
     def __str__(self):
         if self.imported_at:
-            return f"{self.name} ({self.num_items} items imported at {self.imported_at})"
+            return (
+                f"{self.name} ({self.num_items} items imported at {self.imported_at})"
+            )
         else:
             return f"{self.name}"
 
@@ -148,7 +147,12 @@ class Recipe:
                 if_cond_false,
             )
 
-    def add_seed(self, seed_name: str, beaker_name: str, seed_func: Callable[[], Iterable[BaseModel]]) -> None:
+    def add_seed(
+        self,
+        seed_name: str,
+        beaker_name: str,
+        seed_func: Callable[[], Iterable[BaseModel]],
+    ) -> None:
         self.seeds[seed_name] = (beaker_name, seed_func)
 
     def list_seeds(self) -> dict[str, list[str]]:
@@ -159,19 +163,16 @@ class Recipe:
                 seed = Seed(name=seed_name)
             by_beaker[beaker_name].append(seed)
         return dict(by_beaker)
-    
+
     def _db_get_seed(self, seed_name: str) -> Seed | None:
         cursor = self.db.cursor()
         cursor.row_factory = sqlite3.Row
-        cursor.execute(
-            "SELECT * FROM _seeds WHERE name = ?",
-            (seed_name,)
-        )
+        cursor.execute("SELECT * FROM _seeds WHERE name = ?", (seed_name,))
         if row := cursor.fetchone():
             return Seed(**row)
         else:
             return None
-    
+
     def run_seed(self, seed_name: str) -> None:
         try:
             beaker_name, seed_func = self.seeds[seed_name]
