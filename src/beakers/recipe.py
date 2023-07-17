@@ -76,6 +76,8 @@ class Recipe:
     def __repr__(self) -> str:
         return f"Recipe({self.name})"
 
+    # section: graph ##########################################################
+
     def add_beaker(
         self,
         name: str,
@@ -147,6 +149,8 @@ class Recipe:
                 if_cond_false,
             )
 
+    # section: seeds ##########################################################
+
     def add_seed(
         self,
         seed_name: str,
@@ -195,6 +199,21 @@ class Recipe:
             (seed_name, beaker_name, num_items),
         )
         self.db.commit()
+
+    # section: commands #######################################################
+
+    def reset(self) -> None:
+        with self.db:
+            cursor = self.db.cursor()
+            cursor.execute("DELETE FROM _seeds")
+            typer.secho("seeds reset", fg=typer.colors.RED)
+            for beaker in self.beakers.values():
+                if isinstance(beaker, SqliteBeaker):
+                    if bl := len(beaker):
+                        beaker.reset()
+                        typer.secho(f"{beaker.name} reset ({bl})", fg=typer.colors.RED)
+                    else:
+                        typer.secho(f"{beaker.name} empty", fg=typer.colors.GREEN)
 
     def show(self) -> None:
         seed_count = Counter(self.seeds.keys())
@@ -247,6 +266,8 @@ class Recipe:
 
         # all data collected for display
         return sorted(nodes.values(), key=lambda x: (x["rank"], x["name"]))
+
+    # section: running ########################################################
 
     def run_once(
         self, start_beaker: str | None = None, end_beaker: str | None = None

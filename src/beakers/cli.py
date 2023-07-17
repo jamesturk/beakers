@@ -35,13 +35,7 @@ def main(
 
 @app.command()
 def reset(ctx: typer.Context) -> None:
-    for beaker in ctx.obj.beakers.values():
-        if isinstance(beaker, SqliteBeaker):
-            if bl := len(beaker):
-                beaker.reset()
-                typer.secho(f"{beaker.name} reset ({bl})", fg=typer.colors.RED)
-            else:
-                typer.secho(f"{beaker.name} empty", fg=typer.colors.GREEN)
+    ctx.obj.reset()
 
 
 @app.command()
