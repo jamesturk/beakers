@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from beakers.recipe import Recipe
+from beakers.recipe import Recipe, EdgeType
 from beakers.beakers import TempBeaker
 
 
@@ -56,7 +56,7 @@ fruits.add_transform(
     "normalized",
     "fruit",
     is_fruit,
-    edge_type="conditional",
+    edge_type=EdgeType.conditional,
     error_map={(ValueError,): "errors"},
 )
 fruits.add_seed(

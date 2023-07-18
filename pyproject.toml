@@ -29,6 +29,9 @@ pytest-cov = "^4.1.0"
 [tool.ruff]
 line-length = 100
 
+[tool.mypy]
+exclude = "tests/*"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

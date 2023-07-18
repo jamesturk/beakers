@@ -3,7 +3,7 @@ import sqlite3
 import asyncio
 import datetime
 import networkx  # type: ignore
-from enum import StrEnum
+from enum import Enum  # TODO: Python 3.11, StrEnum
 from collections import defaultdict
 from typing import Iterable, Callable, Type
 from pydantic import BaseModel, ConfigDict
@@ -15,7 +15,7 @@ from .exceptions import SeedError
 log = get_logger()
 
 
-class EdgeType(StrEnum):
+class EdgeType(Enum):
     """
     EdgeType affects how the edge function is processed.
 

@@ -5,7 +5,7 @@ from testdata import Word, fruits
 
 
 def capitalized(word: Word) -> Word:
-    return Word(word=word.word.capitalize())
+    return Word(word=word.word.capitalize())  # type: ignore
 
 
 def test_recipe_repr() -> None:
