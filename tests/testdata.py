@@ -13,7 +13,9 @@ class Word(BaseModel):
 
 def is_fruit(word: Word) -> bool:
     if word.word == "error":
-        1 / 0
+        raise ValueError("error")
+    elif word.word == "/0":
+        raise ZeroDivisionError("zero")
     return word.word in {
         "apple",
         "banana",
@@ -55,7 +57,7 @@ fruits.add_transform(
     "fruit",
     is_fruit,
     edge_type="conditional",
-    error_map={(ZeroDivisionError,): "errors"},
+    error_map={(ValueError,): "errors"},
 )
 fruits.add_seed(
     "abc",

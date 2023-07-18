@@ -69,7 +69,7 @@ word (0)
     AttributeError -> nonword
 normalized* (0)
   -(is_fruit)-> fruit
-    ZeroDivisionError -> errors
+    ValueError -> errors
 fruit (0)
 """
     )

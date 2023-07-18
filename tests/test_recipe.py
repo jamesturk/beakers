@@ -1,3 +1,4 @@
+import pytest
 from beakers import Recipe
 from beakers.recipe import Edge
 from testdata import Word, fruits
@@ -154,3 +155,14 @@ def test_run_once_errormap():
     # ERROR winds up in errors, one goes on
     assert len(fruits.beakers["errors"]) == 1
     assert len(fruits.beakers["fruit"]) == 1
+
+
+def test_run_once_error_out():
+    fruits.reset()
+
+    # raise a zero division error, unhandled
+    fruits.beakers["word"].add_item(Word(word="/0"))
+
+    # uncaught error, propagates
+    with pytest.raises(ZeroDivisionError):
+        fruits.run_once()
