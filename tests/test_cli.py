@@ -71,6 +71,8 @@ normalized* (0)
   -(is_fruit)-> fruit
     ValueError -> errors
 fruit (0)
+  -(λ)-> sentence
+sentence (0)
 """
     )
 

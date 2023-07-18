@@ -11,6 +11,10 @@ class Word(BaseModel):
     word: str | int  # allow int for testing error_map
 
 
+class Sentence(BaseModel):
+    sentence: str
+
+
 def is_fruit(word: Word) -> bool:
     if word.word == "error":
         raise ValueError("error")
@@ -46,6 +50,7 @@ fruits.add_beaker("normalized", Word, beaker_type=TempBeaker)
 fruits.add_beaker("fruit", IdOnly)
 fruits.add_beaker("nonword", IdOnly)
 fruits.add_beaker("errors", IdOnly)
+fruits.add_beaker("sentence", Sentence)
 fruits.add_transform(
     "word",
     "normalized",
@@ -58,6 +63,11 @@ fruits.add_transform(
     is_fruit,
     edge_type=EdgeType.conditional,
     error_map={(ValueError,): "errors"},
+)
+fruits.add_transform(
+    "fruit",
+    "sentence",
+    lambda x: Sentence(sentence=f"{x.word} is a delicious fruit."),
 )
 fruits.add_seed(
     "abc",
