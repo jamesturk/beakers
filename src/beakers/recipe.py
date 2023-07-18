@@ -1,10 +1,9 @@
-import typer
 import inspect
 import sqlite3
 import asyncio
 import networkx  # type: ignore
 from enum import StrEnum
-from collections import defaultdict, Counter
+from collections import defaultdict
 from typing import Iterable, Callable, Type
 from pydantic import BaseModel, ConfigDict
 from structlog import get_logger

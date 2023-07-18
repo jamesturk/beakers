@@ -1,4 +1,3 @@
-from collections import Counter
 import importlib
 import typer
 import sys
@@ -46,7 +45,6 @@ def reset(ctx: typer.Context) -> None:
 @app.command()
 def show(ctx: typer.Context) -> None:
     recipe = ctx.obj
-    seed_count = Counter(recipe.seeds.keys())
     graph_data = recipe.graph_data()
     for node in graph_data:
         if node["temp"]:
