@@ -3,6 +3,7 @@ import inspect
 import sqlite3
 import asyncio
 import networkx  # type: ignore
+from enum import StrEnum
 from collections import defaultdict, Counter
 from typing import Iterable, Callable, Type
 from pydantic import BaseModel, ConfigDict
@@ -14,12 +15,25 @@ from .exceptions import SeedError
 log = get_logger()
 
 
-class Transform(BaseModel):
+class EdgeType(StrEnum):
+    """
+    EdgeType affects how the edge function is processed.
+
+    transform: the output of the edge function is added to the to_beaker
+    conditional: if the output of the edge function is truthy, it is added to the to_beaker
+    """
+
+    transform = "transform"
+    conditional = "conditional"
+
+
+class Edge(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
-    transform_func: Callable
+    func: Callable
     error_map: dict[tuple, str]
+    edge_type: EdgeType
 
 
 class Seed(BaseModel):
@@ -40,14 +54,6 @@ class ErrorType(BaseModel):
     item: BaseModel
     exception: str
     exc_type: str
-
-
-def if_cond_true(data_cond_tup: tuple[dict, bool]) -> dict | None:
-    return data_cond_tup[0] if data_cond_tup[1] else None
-
-
-def if_cond_false(data_cond_tup: tuple[dict, bool]) -> dict | None:
-    return data_cond_tup[0] if not data_cond_tup[1] else None
 
 
 class Recipe:
@@ -89,59 +95,25 @@ class Recipe:
         self,
         from_beaker: str,
         to_beaker: str,
-        transform_func: Callable,
+        func: Callable,
         *,
         name: str | None = None,
+        edge_type: EdgeType = EdgeType.transform,
         error_map: dict[tuple, str] | None = None,
     ) -> None:
         if name is None:
-            name = transform_func.__name__
-            if name == "<lambda>":
-                name = "λ"
-        transform = Transform(
+            name = func.__name__ if func.__name__ != "<lambda>" else "λ"
+        edge = Edge(
             name=name,
-            transform_func=transform_func,
+            edge_type=edge_type,
+            func=func,
             error_map=error_map or {},
         )
         self.graph.add_edge(
             from_beaker,
             to_beaker,
-            transform=transform,
+            edge=edge,
         )
-
-    def add_conditional(
-        self,
-        from_beaker: str,
-        condition_func: Callable,
-        if_true: str,
-        if_false: str = "",
-    ) -> None:
-        # first add a transform to evaluate the conditional
-        if condition_func.__name__ == "<lambda>":
-            cond_name = f"cond-{from_beaker}"
-        else:
-            cond_name = f"cond-{from_beaker}-{condition_func.__name__}"
-        self.add_beaker(cond_name, None)
-        self.add_transform(
-            from_beaker,
-            cond_name,
-            lambda data: (data, condition_func(data)),
-            name=cond_name,
-        )
-
-        # then add two filtered paths that remove the condition result
-        self.add_beaker(if_true, None)
-        self.add_transform(
-            cond_name,
-            if_true,
-            if_cond_true,
-        )
-        if if_false:
-            self.add_transform(
-                cond_name,
-                if_false,
-                if_cond_false,
-            )
 
     # section: seeds ##########################################################
 
@@ -263,44 +235,50 @@ class Recipe:
 
             # get outbound edges
             edges = self.graph.out_edges(node, data=True)
-
-            for from_b, to_b, edge in edges:
-                transform = edge["transform"]
+            for from_b, to_b, e in edges:
+                edge = e["edge"]
 
                 from_beaker = self.beakers[from_b]
                 to_beaker = self.beakers[to_b]
                 already_processed = from_beaker.id_set() & to_beaker.id_set()
 
                 log.info(
-                    "transform",
+                    "edge",
                     from_b=from_b,
                     to_b=to_b,
+                    edge=edge,
                     to_process=len(from_beaker) - len(already_processed),
                     already_processed=len(already_processed),
-                    transform=edge["transform"].name,
                 )
 
                 # convert coroutine to function
-                if inspect.iscoroutinefunction(transform.transform_func):
+                if inspect.iscoroutinefunction(edge.func):
 
-                    def t_func(x):
-                        return loop.run_until_complete(transform.transform_func(x))
+                    def e_func(x):
+                        return loop.run_until_complete(edge.func(x))
 
                 else:
-                    t_func = transform.transform_func
+                    e_func = edge.func
 
                 for id, item in from_beaker.items():
                     if id in already_processed:
                         continue
                     try:
-                        transformed = t_func(item)
-                        if transformed:
-                            to_beaker.add_item(transformed, id)
+                        result = e_func(item)
+                        match edge.edge_type:
+                            case EdgeType.transform:
+                                # transform: add result to to_beaker (if not None)
+                                if result is not None:
+                                    to_beaker.add_item(result, id)
+                            case EdgeType.conditional:
+                                # conditional: add item to to_beaker if e_func returns truthy
+                                if result:
+                                    to_beaker.add_item(item, id)
                     except Exception as e:
                         for (
                             error_types,
                             error_beaker_name,
-                        ) in transform.error_map.items():
+                        ) in edge.error_map.items():
                             if isinstance(e, error_types):
                                 error_beaker = self.beakers[error_beaker_name]
                                 error_beaker.add_item(

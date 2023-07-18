@@ -57,8 +57,8 @@ def show(ctx: typer.Context) -> None:
                 fg=typer.colors.GREEN if node["len"] else typer.colors.YELLOW,
             )
         for edge in node["edges"]:
-            typer.secho(f"  -({edge['transform'].name})-> {edge['to_beaker']}")
-            for k, v in edge["transform"].error_map.items():
+            typer.secho(f"  -({edge['edge'].name})-> {edge['to_beaker']}")
+            for k, v in edge["edge"].error_map.items():
                 if isinstance(k, tuple):
                     typer.secho(
                         f"    {' '.join(c.__name__ for c in k)} -> {v}",

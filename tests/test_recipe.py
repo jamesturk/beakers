@@ -1,6 +1,6 @@
 from beakers import Recipe
-from beakers.recipe import Transform
-from testdata import Word
+from beakers.recipe import Edge
+from testdata import Word, fruits
 
 
 def capitalized(word: Word) -> Word:
@@ -24,8 +24,8 @@ def test_add_transform():
     recipe = Recipe("test")
     recipe.add_beaker("word", Word)
     recipe.add_transform("word", "capitalized", capitalized)
-    assert recipe.graph["word"]["capitalized"]["transform"] == Transform(
-        name="capitalized", transform_func=capitalized, error_map={}
+    assert recipe.graph["word"]["capitalized"]["edge"] == Edge(
+        name="capitalized", func=capitalized, error_map={}, edge_type="transform"
     )
 
 
@@ -33,7 +33,7 @@ def test_add_transform_lambda():
     recipe = Recipe("test")
     recipe.add_beaker("word", Word)
     recipe.add_transform("word", "capitalized", lambda x: x)
-    assert recipe.graph["word"]["capitalized"]["transform"].name == "λ"
+    assert recipe.graph["word"]["capitalized"]["edge"].name == "λ"
 
 
 def test_add_transform_error_map():
@@ -42,7 +42,7 @@ def test_add_transform_error_map():
     recipe.add_transform(
         "word", "capitalized", capitalized, error_map={(ValueError,): "error"}
     )
-    assert recipe.graph["word"]["capitalized"]["transform"].error_map == {
+    assert recipe.graph["word"]["capitalized"]["edge"].error_map == {
         (ValueError,): "error"
     }
 
@@ -73,8 +73,11 @@ def test_graph_data_simple():
         "edges": [
             {
                 "to_beaker": "capitalized",
-                "transform": Transform(
-                    name="capitalized", transform_func=capitalized, error_map={}
+                "edge": Edge(
+                    name="capitalized",
+                    func=capitalized,
+                    error_map={},
+                    edge_type="transform",
                 ),
             }
         ],
@@ -84,7 +87,7 @@ def test_graph_data_simple():
     assert gd[1]["rank"] == 2
     assert gd[1]["temp"] is False
     assert gd[1]["edges"][0]["to_beaker"] == "filtered"
-    assert gd[1]["edges"][0]["transform"].name == "λ"
+    assert gd[1]["edges"][0]["edge"].name == "λ"
     assert gd[2] == {
         "len": 0,
         "name": "filtered",
@@ -117,3 +120,24 @@ def test_graph_data_multiple_rank():
     assert gd[3]["rank"] == 3
     assert gd[4]["name"] == "spanish"
     assert gd[4]["rank"] == 3
+
+
+def test_run_once():
+    fruits.reset()
+    fruits.run_seed("abc")
+    assert len(fruits.beakers["word"]) == 3
+    fruits.run_once()
+    assert len(fruits.beakers["normalized"]) == 3
+    assert len(fruits.beakers["fruit"]) == 2
+
+
+def test_run_once_twice():
+    fruits.reset()
+    fruits.run_seed("abc")
+    assert len(fruits.beakers["word"]) == 3
+    fruits.run_once()
+    assert len(fruits.beakers["normalized"]) == 3
+    assert len(fruits.beakers["fruit"]) == 2
+    fruits.run_once()
+    assert len(fruits.beakers["normalized"]) == 3
+    assert len(fruits.beakers["fruit"]) == 2

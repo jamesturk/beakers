@@ -82,6 +82,9 @@ def test_run_simple():
     fruits.reset()
     runner.invoke(app, ["--recipe", "tests.testdata.fruits", "seed", "abc"])
     result = runner.invoke(app, ["--recipe", "tests.testdata.fruits", "run"])
-    assert "transform" in result.output
+    assert "edge" in result.output
     assert "is_fruit" in result.output
     assert result.exit_code == 0
+    assert len(fruits.beakers["word"]) == 3
+    assert len(fruits.beakers["normalized"]) == 3
+    assert len(fruits.beakers["fruit"]) == 2
