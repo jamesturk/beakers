@@ -67,7 +67,7 @@ nonword (0)
 word (0)
   -(λ)-> normalized
     AttributeError -> nonword
-normalized (0)
+normalized* (0)
   -(is_fruit)-> fruit
     ZeroDivisionError -> errors
 fruit (0)
@@ -90,5 +90,6 @@ def test_run_simple():
     assert "is_fruit" in result.output
     assert result.exit_code == 0
     assert len(fruits.beakers["word"]) == 3
-    assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
+    # can't see normalized because it's a TempBeaker & will be empty
+    assert len(fruits.beakers["normalized"]) == 0

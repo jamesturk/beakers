@@ -81,13 +81,10 @@ class Recipe:
         self,
         name: str,
         datatype: Type[BaseModel],
-        # beaker_type: Type[Beaker] = SqliteBeaker,
+        beaker_type: Type[Beaker] = SqliteBeaker,
     ) -> Beaker:
         self.graph.add_node(name, datatype=datatype)
-        if datatype is None:
-            self.beakers[name] = TempBeaker(name, datatype, self)
-        else:
-            self.beakers[name] = SqliteBeaker(name, datatype, self)
+        self.beakers[name] = beaker_type(name, datatype, self)
         return self.beakers[name]
 
     def add_transform(

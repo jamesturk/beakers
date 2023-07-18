@@ -47,13 +47,10 @@ def show(ctx: typer.Context) -> None:
     recipe = ctx.obj
     graph_data = recipe.graph_data()
     for node in graph_data:
-        if node["temp"]:
-            typer.secho(node["name"], fg=typer.colors.CYAN)
-        else:
-            typer.secho(
-                f"{node['name']} ({node['len']})",
-                fg=typer.colors.GREEN if node["len"] else typer.colors.YELLOW,
-            )
+        typer.secho(
+            f"{node['name']}{'*' if node['temp'] else ''} ({node['len']})",
+            fg=typer.colors.GREEN if node["len"] else typer.colors.YELLOW,
+        )
         for edge in node["edges"]:
             typer.secho(f"  -({edge['edge'].name})-> {edge['to_beaker']}")
             for k, v in edge["edge"].error_map.items():

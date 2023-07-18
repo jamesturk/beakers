@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from beakers.recipe import Recipe
+from beakers.beakers import TempBeaker
 
 
 class IdOnly(BaseModel):
@@ -39,7 +40,7 @@ def is_fruit(word: Word) -> bool:
 
 fruits = Recipe("fruits", "fruits_test.db")
 fruits.add_beaker("word", Word)
-fruits.add_beaker("normalized", Word)
+fruits.add_beaker("normalized", Word, beaker_type=TempBeaker)
 fruits.add_beaker("fruit", IdOnly)
 fruits.add_beaker("nonword", IdOnly)
 fruits.add_beaker("errors", IdOnly)
