@@ -1,6 +1,7 @@
 import inspect
 import sqlite3
 import asyncio
+import datetime
 import networkx  # type: ignore
 from enum import StrEnum
 from collections import defaultdict
@@ -47,6 +48,14 @@ class Seed(BaseModel):
             )
         else:
             return f"{self.name}"
+
+
+class RunReport(BaseModel):
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+    start_beaker: str | None
+    end_beaker: str | None
+    nodes: dict[str, dict[str, int]] = {}
 
 
 class ErrorType(BaseModel):
@@ -205,18 +214,39 @@ class Recipe:
 
     # section: running ########################################################
 
-    def run_once(
+    def run_linear(
         self, start_beaker: str | None = None, end_beaker: str | None = None
-    ) -> None:
-        # TODO: produce a run report for printing statistics
+    ) -> RunReport:
+        """
+        Run the recipe linearly.
 
-        log.info("run_once", recipe=self)
+        In a linear run, beakers are processed one at a time, based on a
+        topological sort of the graph.
+
+        This means any beaker without dependencies will be processed first,
+        followed by beakers that depend on those beakers, and so on.
+
+        Args:
+            start_beaker: the name of the beaker to start processing at
+            end_beaker: the name of the beaker to stop processing at
+        """
+        report = RunReport(
+            start_time=datetime.datetime.now(),
+            end_time=datetime.datetime.now(),
+            start_beaker=start_beaker,
+            end_beaker=end_beaker,
+            nodes={},
+        )
+
+        log.info("run_linear", recipe=self)
         loop = asyncio.get_event_loop()
 
         started = False if start_beaker else True
 
         # go through each node in forward order, pushing data
         for node in networkx.topological_sort(self.graph):
+            # store count of dispatched items
+            report.nodes[node] = node_report = defaultdict(int)
             # only process nodes between start and end
             if not started:
                 if node == start_beaker:
@@ -232,11 +262,12 @@ class Recipe:
             # get outbound edges
             edges = self.graph.out_edges(node, data=True)
             for from_b, to_b, e in edges:
-                edge = e["edge"]
-
                 from_beaker = self.beakers[from_b]
                 to_beaker = self.beakers[to_b]
+                edge = e["edge"]
                 already_processed = from_beaker.id_set() & to_beaker.id_set()
+
+                node_report["_already_processed"] += len(already_processed)
 
                 log.info(
                     "edge",
@@ -266,10 +297,12 @@ class Recipe:
                                 # transform: add result to to_beaker (if not None)
                                 if result is not None:
                                     to_beaker.add_item(result, id)
+                                    node_report[to_b] += 1
                             case EdgeType.conditional:
                                 # conditional: add item to to_beaker if e_func returns truthy
                                 if result:
                                     to_beaker.add_item(item, id)
+                                    node_report[to_b] += 1
                     except Exception as e:
                         for (
                             error_types,
@@ -285,7 +318,9 @@ class Recipe:
                                     ),
                                     id,
                                 )
+                                node_report[error_beaker_name] += 1
                                 break
                         else:
                             # no error handler, re-raise
                             raise
+        return report

@@ -100,7 +100,7 @@ def run(
     if not input and not has_data:
         typer.secho("No data! Run seed(s) first.", fg=typer.colors.RED)
         raise typer.Exit(1)
-    ctx.obj.run_once(start, end)
+    ctx.obj.run_linear(start, end)
 
 
 if __name__ == "__main__":  # pragma: no cover

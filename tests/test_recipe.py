@@ -123,41 +123,64 @@ def test_graph_data_multiple_rank():
     assert gd[4]["rank"] == 3
 
 
-def test_run_once():
+def test_run_linear():
     fruits.reset()
     fruits.run_seed("abc")
     assert len(fruits.beakers["word"]) == 3
-    fruits.run_once()
+    report = fruits.run_linear()
+
+    assert report.start_beaker is None
+    assert report.end_beaker is None
+    assert report.start_time is not None
+    assert report.end_time is not None
+    assert len(report.nodes) == 5
+    assert report.nodes["word"]["_already_processed"] == 0
+    assert report.nodes["word"]["normalized"] == 3
+    assert report.nodes["normalized"]["fruit"] == 2
+
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
 
 
-def test_run_once_twice():
+def test_run_linear_twice():
     fruits.reset()
     fruits.run_seed("abc")
     assert len(fruits.beakers["word"]) == 3
-    fruits.run_once()
+    fruits.run_linear()
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
-    fruits.run_once()
+    second_report = fruits.run_linear()
+
+    assert second_report.nodes["word"]["_already_processed"] == 3
+    # TODO: this should be three, since the first run should have
+    #      processed all three items, but it's two because the second run
+    #      doesn't know about the items rejected by the filter.
+    assert second_report.nodes["normalized"]["_already_processed"] == 2
+
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
 
 
-def test_run_once_errormap():
+def test_run_linear_errormap():
     fruits.reset()
     fruits.run_seed("errors")  # [100, "pear", "ERROR"]
     assert len(fruits.beakers["word"]) == 3
-    fruits.run_once()
+    report = fruits.run_linear()
+
     # 100 winds up in non-words, two go on
+    assert report.nodes["word"]["_already_processed"] == 0
+    assert report.nodes["word"]["normalized"] == 2
+    assert report.nodes["word"]["nonword"] == 1
     assert len(fruits.beakers["nonword"]) == 1
     assert len(fruits.beakers["normalized"]) == 2
     # ERROR winds up in errors, one goes on
+    assert report.nodes["normalized"]["errors"] == 1
+    assert report.nodes["normalized"]["fruit"] == 1
     assert len(fruits.beakers["errors"]) == 1
     assert len(fruits.beakers["fruit"]) == 1
 
 
-def test_run_once_error_out():
+def test_run_linear_error_out():
     fruits.reset()
 
     # raise a zero division error, unhandled
@@ -165,4 +188,4 @@ def test_run_once_error_out():
 
     # uncaught error, propagates
     with pytest.raises(ZeroDivisionError):
-        fruits.run_once()
+        fruits.run_linear()
