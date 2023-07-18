@@ -41,7 +41,7 @@ class Seed(BaseModel):
     num_items: int = 0
     imported_at: str | None = None
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.imported_at:
             return (
                 f"{self.name} ({self.num_items} items imported at {self.imported_at})"
@@ -130,7 +130,7 @@ class Recipe:
     ) -> None:
         self.seeds[seed_name] = (beaker_name, seed_func)
 
-    def list_seeds(self) -> dict[str, list[str]]:
+    def list_seeds(self) -> dict[str, list[Seed]]:
         by_beaker = defaultdict(list)
         for seed_name, (beaker_name, _) in self.seeds.items():
             seed = self._db_get_seed(seed_name)
@@ -141,14 +141,14 @@ class Recipe:
 
     def _db_get_seed(self, seed_name: str) -> Seed | None:
         cursor = self.db.cursor()
-        cursor.row_factory = sqlite3.Row
+        cursor.row_factory = sqlite3.Row  # type: ignore
         cursor.execute("SELECT * FROM _seeds WHERE name = ?", (seed_name,))
         if row := cursor.fetchone():
             return Seed(**row)
         else:
             return None
 
-    def run_seed(self, seed_name: str) -> None:
+    def run_seed(self, seed_name: str) -> int:
         try:
             beaker_name, seed_func = self.seeds[seed_name]
         except KeyError:
@@ -239,14 +239,11 @@ class Recipe:
         )
 
         log.info("run_linear", recipe=self)
-        loop = asyncio.get_event_loop()
 
         started = False if start_beaker else True
 
         # go through each node in forward order, pushing data
         for node in networkx.topological_sort(self.graph):
-            # store count of dispatched items
-            report.nodes[node] = node_report = defaultdict(int)
             # only process nodes between start and end
             if not started:
                 if node == start_beaker:
@@ -258,69 +255,79 @@ class Recipe:
             if end_beaker and node == end_beaker:
                 log.info("partial run end", node=node)
                 break
-
-            # get outbound edges
-            edges = self.graph.out_edges(node, data=True)
-            for from_b, to_b, e in edges:
-                from_beaker = self.beakers[from_b]
-                to_beaker = self.beakers[to_b]
-                edge = e["edge"]
-                already_processed = from_beaker.id_set() & to_beaker.id_set()
-
-                node_report["_already_processed"] += len(already_processed)
-
-                log.info(
-                    "edge",
-                    from_b=from_b,
-                    to_b=to_b,
-                    edge=edge,
-                    to_process=len(from_beaker) - len(already_processed),
-                    already_processed=len(already_processed),
-                )
-
-                # convert coroutine to function
-                if inspect.iscoroutinefunction(edge.func):
-
-                    def e_func(x):
-                        return loop.run_until_complete(edge.func(x))
-
-                else:
-                    e_func = edge.func
-
-                for id, item in from_beaker.items():
-                    if id in already_processed:
-                        continue
-                    try:
-                        result = e_func(item)
-                        match edge.edge_type:
-                            case EdgeType.transform:
-                                # transform: add result to to_beaker (if not None)
-                                if result is not None:
-                                    to_beaker.add_item(result, id)
-                                    node_report[to_b] += 1
-                            case EdgeType.conditional:
-                                # conditional: add item to to_beaker if e_func returns truthy
-                                if result:
-                                    to_beaker.add_item(item, id)
-                                    node_report[to_b] += 1
-                    except Exception as e:
-                        for (
-                            error_types,
-                            error_beaker_name,
-                        ) in edge.error_map.items():
-                            if isinstance(e, error_types):
-                                error_beaker = self.beakers[error_beaker_name]
-                                error_beaker.add_item(
-                                    ErrorType(
-                                        item=item,
-                                        exception=str(e),
-                                        exc_type=str(type(e)),
-                                    ),
-                                    id,
-                                )
-                                node_report[error_beaker_name] += 1
-                                break
-                        else:
-                            # no error handler, re-raise
-                            raise
+            report.nodes[node] = self._run_node_linear(node)
         return report
+
+    def _run_node_linear(self, node: str) -> dict[str, int]:
+        """
+        Run a single node in a linear run, returning a report of items dispatched.
+        """
+        # store count of dispatched items
+        node_report: dict[str, int] = defaultdict(int)
+        loop = asyncio.get_event_loop()
+
+        # get outbound edges
+        edges = self.graph.out_edges(node, data=True)
+        for from_b, to_b, e in edges:
+            from_beaker = self.beakers[from_b]
+            to_beaker = self.beakers[to_b]
+            edge = e["edge"]
+            already_processed = from_beaker.id_set() & to_beaker.id_set()
+
+            node_report["_already_processed"] += len(already_processed)
+
+            log.info(
+                "edge",
+                from_b=from_b,
+                to_b=to_b,
+                edge=edge,
+                to_process=len(from_beaker) - len(already_processed),
+                already_processed=len(already_processed),
+            )
+
+            # convert coroutine to function
+            if inspect.iscoroutinefunction(edge.func):
+
+                def e_func(x: BaseModel) -> BaseModel:
+                    return loop.run_until_complete(edge.func(x))
+
+            else:
+                e_func = edge.func
+
+            for id, item in from_beaker.items():
+                if id in already_processed:
+                    continue
+                try:
+                    result = e_func(item)
+                    match edge.edge_type:
+                        case EdgeType.transform:
+                            # transform: add result to to_beaker (if not None)
+                            if result is not None:
+                                to_beaker.add_item(result, id)
+                                node_report[to_b] += 1
+                        case EdgeType.conditional:
+                            # conditional: add item to to_beaker if e_func returns truthy
+                            if result:
+                                to_beaker.add_item(item, id)
+                                node_report[to_b] += 1
+                except Exception as e:
+                    for (
+                        error_types,
+                        error_beaker_name,
+                    ) in edge.error_map.items():
+                        if isinstance(e, error_types):
+                            error_beaker = self.beakers[error_beaker_name]
+                            error_beaker.add_item(
+                                ErrorType(
+                                    item=item,
+                                    exception=str(e),
+                                    exc_type=str(type(e)),
+                                ),
+                                id,
+                            )
+                            node_report[error_beaker_name] += 1
+                            break
+                    else:
+                        # no error handler, re-raise
+                        raise
+        return node_report
