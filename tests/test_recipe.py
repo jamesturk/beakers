@@ -141,3 +141,16 @@ def test_run_once_twice():
     fruits.run_once()
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
+
+
+def test_run_once_errormap():
+    fruits.reset()
+    fruits.run_seed("errors")  # [100, "pear", "ERROR"]
+    assert len(fruits.beakers["word"]) == 3
+    fruits.run_once()
+    # 100 winds up in non-words, two go on
+    assert len(fruits.beakers["nonword"]) == 1
+    assert len(fruits.beakers["normalized"]) == 2
+    # ERROR winds up in errors, one goes on
+    assert len(fruits.beakers["errors"]) == 1
+    assert len(fruits.beakers["fruit"]) == 1

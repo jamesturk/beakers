@@ -22,7 +22,7 @@ def test_no_recipe():
 def test_list_seeds_simple():
     fruits.reset()
     result = runner.invoke(app, ["--recipe", "tests.testdata.fruits", "seeds"])
-    assert result.output == "word\n  abc\n"
+    assert result.output == "word\n  abc\n  errors\n"
     assert result.exit_code == 0
 
 
@@ -62,10 +62,14 @@ def test_show():
     result = runner.invoke(app, ["--recipe", "tests.testdata.fruits", "show"])
     assert (
         result.output
-        == """word (0)
+        == """errors (0)
+nonword (0)
+word (0)
   -(λ)-> normalized
+    AttributeError -> nonword
 normalized (0)
   -(is_fruit)-> fruit
+    ZeroDivisionError -> errors
 fruit (0)
 """
     )
