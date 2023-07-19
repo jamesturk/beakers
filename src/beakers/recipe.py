@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict
 from structlog import get_logger
 
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .exceptions import SeedError
+from .record import Record
+from .exceptions import ItemNotFound, SeedError
 
 log = get_logger()
 
@@ -34,6 +35,7 @@ class Edge(BaseModel):
     func: Callable
     error_map: dict[tuple, str]
     edge_type: EdgeType
+    whole_record: bool
 
 
 class Seed(BaseModel):
@@ -105,6 +107,7 @@ class Recipe:
         name: str | None = None,
         edge_type: EdgeType = EdgeType.transform,
         error_map: dict[tuple, str] | None = None,
+        whole_record: bool = False,
     ) -> None:
         if name is None:
             name = func.__name__ if func.__name__ != "<lambda>" else "λ"
@@ -113,6 +116,7 @@ class Recipe:
             edge_type=edge_type,
             func=func,
             error_map=error_map or {},
+            whole_record=whole_record,
         )
         self.graph.add_edge(
             from_beaker,
@@ -258,6 +262,21 @@ class Recipe:
             report.nodes[node] = self._run_node_linear(node)
         return report
 
+    def _get_full_record(self, id: str) -> Record:
+        """
+        Get the full record for a given id.
+
+        This isn't the most efficient, but for linear runs
+        the alternative is to store all records in memory.
+        """
+        rec = Record(id=id)
+        for beaker_name, beaker in self.beakers.items():
+            try:
+                rec[beaker_name] = beaker.get_item(id)
+            except ItemNotFound:
+                pass
+        return rec
+
     def _run_node_linear(self, node: str) -> dict[str, int]:
         """
         Run a single node in a linear run, returning a report of items dispatched.
@@ -298,7 +317,11 @@ class Recipe:
                 if id in already_processed:
                     continue
                 try:
-                    result = e_func(item)
+                    if edge.whole_record:
+                        record = self._get_full_record(id)
+                        result = e_func(record)
+                    else:
+                        result = e_func(item)
                     match edge.edge_type:
                         case EdgeType.transform:
                             # transform: add result to to_beaker (if not None)

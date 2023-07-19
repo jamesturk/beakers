@@ -4,6 +4,7 @@ import sqlite3
 import uuid
 from pydantic import BaseModel
 from typing import Iterable, Type, TYPE_CHECKING
+from .exceptions import ItemNotFound
 
 if TYPE_CHECKING:  # pragma: no cover
     from .recipe import Recipe
@@ -44,6 +45,12 @@ class Beaker(abc.ABC):
         Reset the beaker to empty.
         """
 
+    @abc.abstractmethod
+    def get_item(self, id: str) -> BaseModel:
+        """
+        Get an item from the beaker by id.
+        """
+
     def add_items(self, items: Iterable[BaseModel]) -> None:
         for item in items:
             self.add_item(item)
@@ -70,6 +77,13 @@ class TempBeaker(Beaker):
 
     def reset(self) -> None:
         self._items = []
+
+    def get_item(self, id: str) -> BaseModel:
+        # TODO: make O(1)
+        for item_id, item in self._items:
+            if item_id == id:
+                return item
+        raise KeyError(f"{id} not found in {self.name}")
 
 
 class SqliteBeaker(Beaker):
@@ -104,3 +118,10 @@ class SqliteBeaker(Beaker):
     def reset(self) -> None:
         self.cursor.execute(f"DELETE FROM {self.name}")
         self.recipe.db.commit()
+
+    def get_item(self, id: str) -> BaseModel:
+        self.cursor.execute(f"SELECT data FROM {self.name} WHERE uuid = ?", (id,))
+        row = self.cursor.fetchone()
+        if row is None:
+            raise ItemNotFound(f"{id} not found in {self.name}")
+        return self.model(**json.loads(row["data"]))

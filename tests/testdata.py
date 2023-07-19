@@ -67,7 +67,8 @@ fruits.add_transform(
 fruits.add_transform(
     "fruit",
     "sentence",
-    lambda x: Sentence(sentence=f"{x.word} is a delicious fruit."),
+    lambda r: Sentence(sentence=f"{r['word'].word} is a delicious fruit."),
+    whole_record=True,
 )
 fruits.add_seed(
     "abc",

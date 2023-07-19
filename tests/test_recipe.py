@@ -26,7 +26,11 @@ def test_add_transform():
     recipe.add_beaker("word", Word)
     recipe.add_transform("word", "capitalized", capitalized)
     assert recipe.graph["word"]["capitalized"]["edge"] == Edge(
-        name="capitalized", func=capitalized, error_map={}, edge_type="transform"
+        name="capitalized",
+        func=capitalized,
+        error_map={},
+        edge_type="transform",
+        whole_record=False,
     )
 
 
@@ -79,6 +83,7 @@ def test_graph_data_simple():
                     func=capitalized,
                     error_map={},
                     edge_type="transform",
+                    whole_record=False,
                 ),
             }
         ],
@@ -133,13 +138,15 @@ def test_run_linear():
     assert report.end_beaker is None
     assert report.start_time is not None
     assert report.end_time is not None
-    assert len(report.nodes) == 5
+    assert len(report.nodes) == 6
     assert report.nodes["word"]["_already_processed"] == 0
     assert report.nodes["word"]["normalized"] == 3
     assert report.nodes["normalized"]["fruit"] == 2
+    assert report.nodes["fruit"]["sentence"] == 2
 
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
+    assert len(fruits.beakers["sentence"]) == 2
 
 
 def test_run_linear_twice():
