@@ -83,7 +83,7 @@ class TempBeaker(Beaker):
         for item_id, item in self._items:
             if item_id == id:
                 return item
-        raise KeyError(f"{id} not found in {self.name}")
+        raise ItemNotFound(f"{id} not found in {self.name}")
 
 
 class SqliteBeaker(Beaker):

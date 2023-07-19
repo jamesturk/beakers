@@ -1,6 +1,7 @@
 import pytest
 from beakers import Recipe
 from beakers.beakers import TempBeaker, SqliteBeaker
+from beakers.exceptions import ItemNotFound
 from testdata import Word
 
 
@@ -60,3 +61,23 @@ def test_id_set(beakerCls):
     beaker = beakerCls("test", Word, recipe)
     beaker.add_items([Word(word="one"), Word(word="two")])
     assert beaker.id_set() == {id for id, _ in beaker.items()}
+
+
+@pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
+def test_getitem_basic(beakerCls):
+    recipe = Recipe("test", ":memory:")
+    beaker = beakerCls("test", Word, recipe)
+    words = [Word(word="one"), Word(word="two")]
+    beaker.add_items(words)
+
+    for id in beaker.id_set():
+        assert beaker.get_item(id) in words
+
+
+@pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
+def test_getitem_missing(beakerCls):
+    recipe = Recipe("test", ":memory:")
+    beaker = beakerCls("test", Word, recipe)
+
+    with pytest.raises(ItemNotFound):
+        beaker.get_item("missing")

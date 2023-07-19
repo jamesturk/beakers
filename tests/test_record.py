@@ -20,3 +20,8 @@ def test_record_setattr_id():
     r = Record(id="123")
     with pytest.raises(AttributeError):
         r["id"] = "changed"
+
+
+def test_record_getattr_id():
+    r = Record(id="123")
+    assert r["id"] == "123"
