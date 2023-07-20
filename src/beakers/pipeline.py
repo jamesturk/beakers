@@ -73,6 +73,7 @@ class Pipeline:
         self.beakers: dict[str, Beaker] = {}
         self.seeds: dict[str, tuple[str, Callable[[], Iterable[BaseModel]]]] = {}
         self.db = sqlite3.connect(db_name)
+        self.db.row_factory = sqlite3.Row  # type: ignore
         cursor = self.db.cursor()
         cursor.execute(
             """CREATE TABLE IF NOT EXISTS _seeds (
@@ -163,15 +164,15 @@ class Pipeline:
             raise SeedError(f"{seed_name} already run at {seed.imported_at}")
 
         num_items = 0
-        for item in seed_func():
-            beaker.add_item(item)
-            num_items += 1
-
         with self.db:
+            for item in seed_func():
+                beaker.add_item(item)
+                num_items += 1
             self.db.execute(
                 "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
                 (seed_name, beaker_name, num_items),
             )
+
         return num_items
 
     # section: commands #######################################################
@@ -315,41 +316,42 @@ class Pipeline:
             for id, item in from_beaker.items():
                 if id in already_processed:
                     continue
-                try:
-                    if edge.whole_record:
-                        record = self._get_full_record(id)
-                        result = e_func(record)
-                    else:
-                        result = e_func(item)
-                    match edge.edge_type:
-                        case EdgeType.transform:
-                            # transform: add result to to_beaker (if not None)
-                            if result is not None:
-                                to_beaker.add_item(result, id)
-                                node_report[to_b] += 1
-                        case EdgeType.conditional:
-                            # conditional: add item to to_beaker if e_func returns truthy
-                            if result:
-                                to_beaker.add_item(item, id)
-                                node_report[to_b] += 1
-                except Exception as e:
-                    for (
-                        error_types,
-                        error_beaker_name,
-                    ) in edge.error_map.items():
-                        if isinstance(e, error_types):
-                            error_beaker = self.beakers[error_beaker_name]
-                            error_beaker.add_item(
-                                ErrorType(
-                                    item=item,
-                                    exception=str(e),
-                                    exc_type=str(type(e)),
-                                ),
-                                id,
-                            )
-                            node_report[error_beaker_name] += 1
-                            break
-                    else:
-                        # no error handler, re-raise
-                        raise
+                with self.db:
+                    try:
+                        if edge.whole_record:
+                            record = self._get_full_record(id)
+                            result = e_func(record)
+                        else:
+                            result = e_func(item)
+                        match edge.edge_type:
+                            case EdgeType.transform:
+                                # transform: add result to to_beaker (if not None)
+                                if result is not None:
+                                    to_beaker.add_item(result, id)
+                                    node_report[to_b] += 1
+                            case EdgeType.conditional:
+                                # conditional: add item to to_beaker if e_func returns truthy
+                                if result:
+                                    to_beaker.add_item(item, id)
+                                    node_report[to_b] += 1
+                    except Exception as e:
+                        for (
+                            error_types,
+                            error_beaker_name,
+                        ) in edge.error_map.items():
+                            if isinstance(e, error_types):
+                                error_beaker = self.beakers[error_beaker_name]
+                                error_beaker.add_item(
+                                    ErrorType(
+                                        item=item,
+                                        exception=str(e),
+                                        exc_type=str(type(e)),
+                                    ),
+                                    id,
+                                )
+                                node_report[error_beaker_name] += 1
+                                break
+                        else:
+                            # no error handler, re-raise
+                            raise
         return node_report
