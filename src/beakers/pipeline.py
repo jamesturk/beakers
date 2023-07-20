@@ -167,12 +167,11 @@ class Pipeline:
             beaker.add_item(item)
             num_items += 1
 
-        cursor = self.db.cursor()
-        cursor.execute(
-            "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
-            (seed_name, beaker_name, num_items),
-        )
-        self.db.commit()
+        with self.db:
+            self.db.execute(
+                "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
+                (seed_name, beaker_name, num_items),
+            )
         return num_items
 
     # section: commands #######################################################

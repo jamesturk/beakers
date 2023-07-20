@@ -1,4 +1,6 @@
 import importlib
+import time
+import datetime
 import typer
 import sys
 from types import SimpleNamespace
@@ -82,8 +84,13 @@ def seeds(ctx: typer.Context) -> None:
 @app.command()
 def seed(ctx: typer.Context, name: str) -> None:
     try:
+        start_time = time.time()
         num_items = ctx.obj.run_seed(name)
-        typer.secho(f"Seeded with {num_items} items", fg=typer.colors.GREEN)
+        duration = time.time() - start_time
+        duration_dt = datetime.timedelta(seconds=duration)
+        typer.secho(
+            f"Seeded with {num_items} items in {duration_dt}", fg=typer.colors.GREEN
+        )
     except SeedError as e:
         typer.secho(f"{e}", fg=typer.colors.RED)
         raise typer.Exit(1)
