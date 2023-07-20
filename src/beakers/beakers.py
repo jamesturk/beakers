@@ -7,16 +7,16 @@ from typing import Iterable, Type, TYPE_CHECKING
 from .exceptions import ItemNotFound
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .recipe import Recipe
+    from .pipeline import Pipeline
 
 PydanticModel = Type[BaseModel]
 
 
 class Beaker(abc.ABC):
-    def __init__(self, name: str, model: PydanticModel, recipe: "Recipe"):
+    def __init__(self, name: str, model: PydanticModel, pipeline: "Pipeline"):
         self.name = name
         self.model = model
-        self.recipe = recipe
+        self.pipeline = pipeline
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name}, {self.model.__name__})"
@@ -60,8 +60,8 @@ class Beaker(abc.ABC):
 
 
 class TempBeaker(Beaker):
-    def __init__(self, name: str, model: PydanticModel, recipe: "Recipe"):
-        super().__init__(name, model, recipe)
+    def __init__(self, name: str, model: PydanticModel, pipeline: "Pipeline"):
+        super().__init__(name, model, pipeline)
         self._items: list[tuple[str, BaseModel]] = []
 
     def __len__(self) -> int:
@@ -87,10 +87,10 @@ class TempBeaker(Beaker):
 
 
 class SqliteBeaker(Beaker):
-    def __init__(self, name: str, model: PydanticModel, recipe: "Recipe"):
-        super().__init__(name, model, recipe)
+    def __init__(self, name: str, model: PydanticModel, pipeline: "Pipeline"):
+        super().__init__(name, model, pipeline)
         # create table if it doesn't exist
-        self.cursor = self.recipe.db.cursor()
+        self.cursor = self.pipeline.db.cursor()
         self.cursor.row_factory = sqlite3.Row  # type: ignore
         self.cursor.execute(
             f"CREATE TABLE IF NOT EXISTS {self.name} (uuid TEXT PRIMARY KEY, data JSON)"
@@ -113,11 +113,11 @@ class SqliteBeaker(Beaker):
             f"INSERT INTO {self.name} (uuid, data) VALUES (?, ?)",
             (id, item.model_dump_json()),
         )
-        self.recipe.db.commit()
+        self.pipeline.db.commit()
 
     def reset(self) -> None:
         self.cursor.execute(f"DELETE FROM {self.name}")
-        self.recipe.db.commit()
+        self.pipeline.db.commit()
 
     def get_item(self, id: str) -> BaseModel:
         self.cursor.execute(f"SELECT data FROM {self.name} WHERE uuid = ?", (id,))

@@ -1,6 +1,7 @@
 import pytest
-from beakers import Recipe
-from beakers.recipe import Edge
+from beakers import Pipeline
+from beakers.pipeline import Edge, Seed
+from beakers.exceptions import SeedError
 from testdata import Word, fruits
 
 
@@ -8,24 +9,82 @@ def capitalized(word: Word) -> Word:
     return Word(word=word.word.capitalize())  # type: ignore
 
 
-def test_recipe_repr() -> None:
-    recipe = Recipe("test")
-    assert repr(recipe) == "Recipe(test)"
+@pytest.fixture
+def pipeline():
+    r = Pipeline("seed_test", ":memory:")
+    r.add_beaker("word", Word)
+    r.add_seed("one", "word", lambda: [Word(word="apple")])
+    r.add_seed(
+        "many",
+        "word",
+        lambda: [Word(word="banana"), Word(word="orange"), Word(word="pear")],
+    )
+    return r
+
+
+def test_list_seeds_no_runs(pipeline):
+    assert pipeline.list_seeds() == {
+        "word": [Seed(name="one"), Seed(name="many")],
+    }
+
+
+def test_list_seeds_runs(pipeline):
+    pipeline.run_seed("many")
+    one, many = pipeline.list_seeds()["word"]
+    assert one == Seed(name="one")
+    assert many.name == "many"
+    assert many.num_items == 3
+    # 202x
+    assert many.imported_at.startswith("202")
+
+
+def test_run_seed_basic(pipeline):
+    assert pipeline.run_seed("one") == 1
+    assert len(pipeline.beakers["word"]) == 1
+    assert pipeline.run_seed("many") == 3
+    assert len(pipeline.beakers["word"]) == 4
+
+
+def test_run_seed_bad_name(pipeline):
+    with pytest.raises(SeedError):
+        pipeline.run_seed("bad")
+
+
+def test_run_seed_already_run(pipeline):
+    pipeline.run_seed("one")
+    assert len(pipeline.beakers["word"]) == 1
+    with pytest.raises(SeedError):
+        pipeline.run_seed("one")
+    assert len(pipeline.beakers["word"]) == 1
+
+
+def test_reset_seeds(pipeline):
+    pipeline.run_seed("one")
+    pipeline.run_seed("many")
+    assert len(pipeline.beakers["word"]) == 4
+    reset_list = pipeline.reset()
+    assert reset_list == ["2 seeds", "word (4)"]
+    assert len(pipeline.beakers["word"]) == 0
+
+
+def test_pipeline_repr() -> None:
+    pipeline = Pipeline("test")
+    assert repr(pipeline) == "Pipeline(test)"
 
 
 def test_add_beaker_simple() -> None:
-    recipe = Recipe("test")
-    recipe.add_beaker("word", Word)
-    assert recipe.beakers["word"].name == "word"
-    assert recipe.beakers["word"].model == Word
-    assert recipe.beakers["word"].recipe == recipe
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("word", Word)
+    assert pipeline.beakers["word"].name == "word"
+    assert pipeline.beakers["word"].model == Word
+    assert pipeline.beakers["word"].pipeline == pipeline
 
 
 def test_add_transform():
-    recipe = Recipe("test")
-    recipe.add_beaker("word", Word)
-    recipe.add_transform("word", "capitalized", capitalized)
-    assert recipe.graph["word"]["capitalized"]["edge"] == Edge(
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("word", Word)
+    pipeline.add_transform("word", "capitalized", capitalized)
+    assert pipeline.graph["word"]["capitalized"]["edge"] == Edge(
         name="capitalized",
         func=capitalized,
         error_map={},
@@ -35,32 +94,25 @@ def test_add_transform():
 
 
 def test_add_transform_lambda():
-    recipe = Recipe("test")
-    recipe.add_beaker("word", Word)
-    recipe.add_transform("word", "capitalized", lambda x: x)
-    assert recipe.graph["word"]["capitalized"]["edge"].name == "λ"
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("word", Word)
+    pipeline.add_transform("word", "capitalized", lambda x: x)
+    assert pipeline.graph["word"]["capitalized"]["edge"].name == "λ"
 
 
 def test_add_transform_error_map():
-    recipe = Recipe("test")
-    recipe.add_beaker("word", Word)
-    recipe.add_transform(
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("word", Word)
+    pipeline.add_transform(
         "word", "capitalized", capitalized, error_map={(ValueError,): "error"}
     )
-    assert recipe.graph["word"]["capitalized"]["edge"].error_map == {
+    assert pipeline.graph["word"]["capitalized"]["edge"].error_map == {
         (ValueError,): "error"
     }
 
 
-# def test_add_conditional_simple():
-#     recipe = Recipe("test")
-#     recipe.add_beaker("word", Word)
-#     recipe.add_conditional("word", "capitalized", lambda x: True)
-#     assert recipe.graph["word"]["capitalized"]["conditional"].name == "λ"
-
-
 def test_graph_data_simple():
-    r = Recipe("test")
+    r = Pipeline("test")
     r.add_beaker("word", Word)
     r.add_beaker("capitalized", Word)
     r.add_beaker("filtered", Word)
@@ -104,7 +156,7 @@ def test_graph_data_simple():
 
 
 def test_graph_data_multiple_rank():
-    r = Recipe("test")
+    r = Pipeline("test")
     r.add_beaker("nouns", Word)
     r.add_beaker("verbs", Word)
     r.add_beaker("normalized", Word)

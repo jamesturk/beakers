@@ -11,7 +11,7 @@ from beakers.exceptions import SeedError
 app = typer.Typer()
 
 
-def _load_recipe(dotted_path: str) -> SimpleNamespace:
+def _load_pipeline(dotted_path: str) -> SimpleNamespace:
     sys.path.append(".")
     path, name = dotted_path.rsplit(".", 1)
     mod = importlib.import_module(path)
@@ -21,15 +21,15 @@ def _load_recipe(dotted_path: str) -> SimpleNamespace:
 @app.callback()
 def main(
     ctx: typer.Context,
-    recipe: str = typer.Option(None, envvar="BEAKER_RECIPE"),
+    pipeline: str = typer.Option(None, envvar="BEAKER_PIPELINE"),
 ) -> None:
-    if not recipe:
+    if not pipeline:
         typer.secho(
-            "Missing recipe; pass --recipe or set env[BEAKER_RECIPE]",
+            "Missing pipeline; pass --pipeline or set env[BEAKER_PIPELINE]",
             fg=typer.colors.RED,
         )
         raise typer.Exit(1)
-    ctx.obj = _load_recipe(recipe)
+    ctx.obj = _load_pipeline(pipeline)
 
 
 @app.command()
@@ -44,8 +44,8 @@ def reset(ctx: typer.Context) -> None:
 
 @app.command()
 def show(ctx: typer.Context) -> None:
-    recipe = ctx.obj
-    graph_data = recipe.graph_data()
+    pipeline = ctx.obj
+    graph_data = pipeline.graph_data()
     for node in graph_data:
         typer.secho(
             f"{node['name']}{'*' if node['temp'] else ''} ({node['len']})",

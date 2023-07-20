@@ -66,7 +66,7 @@ class ErrorType(BaseModel):
     exc_type: str
 
 
-class Recipe:
+class Pipeline:
     def __init__(self, name: str, db_name: str = "beakers.db"):
         self.name = name
         self.graph = networkx.DiGraph()
@@ -84,7 +84,7 @@ class Recipe:
         )
 
     def __repr__(self) -> str:
-        return f"Recipe({self.name})"
+        return f"Pipeline({self.name})"
 
     # section: graph ##########################################################
 
@@ -222,7 +222,7 @@ class Recipe:
         self, start_beaker: str | None = None, end_beaker: str | None = None
     ) -> RunReport:
         """
-        Run the recipe linearly.
+        Run the pipeline linearly.
 
         In a linear run, beakers are processed one at a time, based on a
         topological sort of the graph.
@@ -242,7 +242,7 @@ class Recipe:
             nodes={},
         )
 
-        log.info("run_linear", recipe=self)
+        log.info("run_linear", pipeline=self)
 
         started = False if start_beaker else True
 

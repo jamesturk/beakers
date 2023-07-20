@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from beakers.recipe import Recipe, EdgeType
+from beakers.pipeline import Pipeline, EdgeType
 from beakers.beakers import TempBeaker
 
 
@@ -44,7 +44,7 @@ def is_fruit(word: Word) -> bool:
     }
 
 
-fruits = Recipe("fruits", "fruits_test.db")
+fruits = Pipeline("fruits", "fruits_test.db")
 fruits.add_beaker("word", Word)
 fruits.add_beaker("normalized", Word, beaker_type=TempBeaker)
 fruits.add_beaker("fruit", IdOnly)

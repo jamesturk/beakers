@@ -1,1 +1,1 @@
-from .recipe import Recipe  # noqa
+from .pipeline import Pipeline  # noqa

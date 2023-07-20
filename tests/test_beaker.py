@@ -1,5 +1,5 @@
 import pytest
-from beakers import Recipe
+from beakers import Pipeline
 from beakers.beakers import TempBeaker, SqliteBeaker
 from beakers.exceptions import ItemNotFound
 from testdata import Word
@@ -7,15 +7,15 @@ from testdata import Word
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_beaker_repr(beakerCls):
-    recipe = Recipe("test")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test")
+    beaker = beakerCls("test", Word, pipeline)
     assert repr(beaker) == f"{beakerCls.__name__}(test, Word)"
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_length(beakerCls):
-    recipe = Recipe("test", ":memory:")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test", ":memory:")
+    beaker = beakerCls("test", Word, pipeline)
     assert len(beaker) == 0
     beaker.add_item(Word(word="one"))
     assert len(beaker) == 1
@@ -25,8 +25,8 @@ def test_length(beakerCls):
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_items(beakerCls):
-    recipe = Recipe("test", ":memory:")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test", ":memory:")
+    beaker = beakerCls("test", Word, pipeline)
     beaker.add_item(Word(word="one"))
     beaker.add_item(Word(word="two"))
     items = list(beaker.items())
@@ -38,8 +38,8 @@ def test_items(beakerCls):
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_reset(beakerCls):
-    recipe = Recipe("test", ":memory:")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test", ":memory:")
+    beaker = beakerCls("test", Word, pipeline)
     beaker.add_item(Word(word="one"))
     beaker.add_item(Word(word="two"))
     assert len(beaker) == 2
@@ -49,24 +49,24 @@ def test_reset(beakerCls):
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_add_items(beakerCls):
-    recipe = Recipe("test", ":memory:")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test", ":memory:")
+    beaker = beakerCls("test", Word, pipeline)
     beaker.add_items([Word(word="one"), Word(word="two")])
     assert len(beaker) == 2
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_id_set(beakerCls):
-    recipe = Recipe("test", ":memory:")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test", ":memory:")
+    beaker = beakerCls("test", Word, pipeline)
     beaker.add_items([Word(word="one"), Word(word="two")])
     assert beaker.id_set() == {id for id, _ in beaker.items()}
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_getitem_basic(beakerCls):
-    recipe = Recipe("test", ":memory:")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test", ":memory:")
+    beaker = beakerCls("test", Word, pipeline)
     words = [Word(word="one"), Word(word="two")]
     beaker.add_items(words)
 
@@ -76,8 +76,8 @@ def test_getitem_basic(beakerCls):
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_getitem_missing(beakerCls):
-    recipe = Recipe("test", ":memory:")
-    beaker = beakerCls("test", Word, recipe)
+    pipeline = Pipeline("test", ":memory:")
+    beaker = beakerCls("test", Word, pipeline)
 
     with pytest.raises(ItemNotFound):
         beaker.get_item("missing")
