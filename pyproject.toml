@@ -10,7 +10,7 @@ bkr = 'beakers.cli:app'
 
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.9"
 #scrapeghost = {path = "../scrapeghost", develop = true}
 scrapelib = "^2.1.0"
 httpx = "^0.24.0"
