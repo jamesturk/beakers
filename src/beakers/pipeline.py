@@ -311,15 +311,9 @@ class Pipeline:
                 to_process=len(from_beaker) - len(already_processed),
                 already_processed=len(already_processed),
             )
-            loop.run_until_complete(self._run_edge_async(loop, from_beaker, to_beaker, edge, already_processed))
-            # synchronous mode
-            # for id, item in from_beaker.items():
-            #     if id in already_processed:
-            #         continue
-
-                # with self.db:
-                #     result_loc = loop.run_until_complete(self._process_item(edge, to_beaker, id, item))
-                #     node_report[result_loc] += 1
+            partial_result = loop.run_until_complete(self._run_edge_async(loop, from_beaker, to_beaker, edge, already_processed))
+            for k, v in partial_result.items():
+                node_report[k] += v
 
         return node_report
     
@@ -364,15 +358,19 @@ class Pipeline:
         await asyncio.wait([queue_complete, *workers],
                             return_when=asyncio.FIRST_COMPLETED)
 
+        # an error occurred, clean up and re-raise
+        to_raise = None
         if not queue_complete.done():
             queue_complete.cancel()
             for w in workers:
                 if w.done():
-                    # will raise if worker raised
-                    w.result()
+                    to_raise = w.exception()
                 else:
                     # cancel any workers still running
                     w.cancel()
+            raise to_raise
+        
+        return node_report
 
     async def _process_item(self, edge, to_beaker, id, item) -> str:
         """
