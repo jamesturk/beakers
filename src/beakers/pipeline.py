@@ -281,9 +281,14 @@ class Pipeline:
         """
         Run a single node in a linear run, returning a report of items dispatched.
         """
+        loop = asyncio.new_event_loop()
         # store count of dispatched items
         node_report: dict[str, int] = defaultdict(int)
-        loop = asyncio.get_event_loop()
+
+        # convert coroutine to function if needed
+        # if inspect.iscoroutinefunction(edge.func):
+        #     def e_func(x: BaseModel) -> BaseModel:
+        #         return loop.run_until_complete(edge.func(x))
 
         # get outbound edges
         edges = self.graph.out_edges(node, data=True)
@@ -292,66 +297,84 @@ class Pipeline:
             to_beaker = self.beakers[to_b]
             edge = e["edge"]
             already_processed = from_beaker.id_set() & to_beaker.id_set()
-
             node_report["_already_processed"] += len(already_processed)
 
             log.info(
                 "edge",
-                from_b=from_b,
-                to_b=to_b,
+                from_b=from_beaker.name,
+                to_b=to_beaker.name,
                 edge=edge,
                 to_process=len(from_beaker) - len(already_processed),
                 already_processed=len(already_processed),
             )
-
-            # convert coroutine to function
-            if inspect.iscoroutinefunction(edge.func):
-
-                def e_func(x: BaseModel) -> BaseModel:
-                    return loop.run_until_complete(edge.func(x))
-
-            else:
-                e_func = edge.func
-
             for id, item in from_beaker.items():
                 if id in already_processed:
                     continue
                 with self.db:
-                    try:
-                        if edge.whole_record:
-                            record = self._get_full_record(id)
-                            result = e_func(record)
-                        else:
-                            result = e_func(item)
-                        match edge.edge_type:
-                            case EdgeType.transform:
-                                # transform: add result to to_beaker (if not None)
-                                if result is not None:
-                                    to_beaker.add_item(result, id)
-                                    node_report[to_b] += 1
-                            case EdgeType.conditional:
-                                # conditional: add item to to_beaker if e_func returns truthy
-                                if result:
-                                    to_beaker.add_item(item, id)
-                                    node_report[to_b] += 1
-                    except Exception as e:
-                        for (
-                            error_types,
-                            error_beaker_name,
-                        ) in edge.error_map.items():
-                            if isinstance(e, error_types):
-                                error_beaker = self.beakers[error_beaker_name]
-                                error_beaker.add_item(
-                                    ErrorType(
-                                        item=item,
-                                        exception=str(e),
-                                        exc_type=str(type(e)),
-                                    ),
-                                    id,
-                                )
-                                node_report[error_beaker_name] += 1
-                                break
-                        else:
-                            # no error handler, re-raise
-                            raise
+                    result_loc = self._process_item(edge, to_beaker, id, item)
+                    node_report[result_loc] += 1
+
         return node_report
+
+    def _run_edge_async(self, from_beaker: Beaker, to_beaker: Beaker, edge: Edge, already_processed: set[str]) -> dict[str, int]:
+        loop = asyncio.new_event_loop()
+        node_report: dict[str, int] = defaultdict(int)
+        queue = asyncio.Queue()
+
+        # enqueue all items
+        for id, item in from_beaker.items():
+            if id in already_processed:
+                continue
+            queue.put_nowait((id, item))
+
+        # worker function
+        async def queue_worker(name, queue):
+            while True:
+                task = await queue.get()
+                log.info("queue_worker accepted task", name=name, task=task)
+
+                if edge.whole_record:
+                    record = self._get_full_record(id)
+                    result = await edge.func(record)
+                else:
+                    result = await edge.func(item)
+
+                queue.task_done()
+
+    def _process_item(self, edge, to_beaker, id, item):
+        try:
+            if edge.whole_record:
+                record = self._get_full_record(id)
+                result = edge.func(record)
+            else:
+                result = edge.func(item)
+            match edge.edge_type:
+                case EdgeType.transform:
+                    # transform: add result to to_beaker (if not None)
+                    if result is not None:
+                        to_beaker.add_item(result, id)
+                        return to_beaker.name
+                case EdgeType.conditional:
+                    # conditional: add item to to_beaker if e_func returns truthy
+                    if result:
+                        to_beaker.add_item(item, id)
+                        return to_beaker.name
+        except Exception as e:
+            for (
+                error_types,
+                error_beaker_name,
+            ) in edge.error_map.items():
+                if isinstance(e, error_types):
+                    error_beaker = self.beakers[error_beaker_name]
+                    error_beaker.add_item(
+                        ErrorType(
+                            item=item,
+                            exception=str(e),
+                            exc_type=str(type(e)),
+                        ),
+                        id,
+                    )
+                    return error_beaker.name
+            else:
+                # no error handler, re-raise
+                raise
