@@ -7,3 +7,5 @@ site
 htmlcov
 .coverage
 *.db
+*.db-shm
+*.db-wal

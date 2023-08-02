@@ -83,6 +83,10 @@ class Pipeline:
                 imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )"""
         )
+        cursor.execute("PRAGMA journal_mode=WAL;")
+        # result = cursor.fetchone()
+        # if tuple(result)[0] != "wal":
+        #     raise SystemError(f"Unable to set WAL mode {result[0]}")
 
     def __repr__(self) -> str:
         return f"Pipeline({self.name})"
@@ -300,26 +304,28 @@ class Pipeline:
             node_report["_already_processed"] += len(already_processed)
 
             log.info(
-                "edge",
+                "processing edge",
                 from_b=from_beaker.name,
                 to_b=to_beaker.name,
-                edge=edge,
+                edge=edge.name,
                 to_process=len(from_beaker) - len(already_processed),
                 already_processed=len(already_processed),
             )
-            for id, item in from_beaker.items():
-                if id in already_processed:
-                    continue
-                with self.db:
-                    result_loc = self._process_item(edge, to_beaker, id, item)
-                    node_report[result_loc] += 1
+            loop.run_until_complete(self._run_edge_async(loop, from_beaker, to_beaker, edge, already_processed))
+            # synchronous mode
+            # for id, item in from_beaker.items():
+            #     if id in already_processed:
+            #         continue
+
+                # with self.db:
+                #     result_loc = loop.run_until_complete(self._process_item(edge, to_beaker, id, item))
+                #     node_report[result_loc] += 1
 
         return node_report
-
-    def _run_edge_async(self, from_beaker: Beaker, to_beaker: Beaker, edge: Edge, already_processed: set[str]) -> dict[str, int]:
-        loop = asyncio.new_event_loop()
-        node_report: dict[str, int] = defaultdict(int)
+    
+    async def _run_edge_async(self, loop, from_beaker: Beaker, to_beaker: Beaker, edge: Edge, already_processed: set[str]) -> dict[str, int]:
         queue = asyncio.Queue()
+        node_report: dict[str, int] = defaultdict(int)
 
         # enqueue all items
         for id, item in from_beaker.items():
@@ -327,21 +333,53 @@ class Pipeline:
                 continue
             queue.put_nowait((id, item))
 
+        log.info("edge queue populated", edge=edge.name, queue_len=queue.qsize())
+
         # worker function
         async def queue_worker(name, queue):
             while True:
-                task = await queue.get()
-                log.info("queue_worker accepted task", name=name, task=task)
+                try:
+                    id, item = await queue.get()
+                except RuntimeError:
+                    # queue closed
+                    return
+                log.info("task accepted", worker=name, id=id, item=item, edge=edge.name)
 
-                if edge.whole_record:
-                    record = self._get_full_record(id)
-                    result = await edge.func(record)
+                try:
+                    with self.db:
+                        result_loc = await self._process_item(edge, to_beaker, id, item)
+                    node_report[result_loc] += 1
+                    queue.task_done()
+                except Exception:
+                    # uncaught exception, log and re-raise
+                    result_loc = "UNCAUGHT_EXCEPTION"
+                    raise
+                finally:
+                    log.info("task done", worker=name, id=id, item=item, sent_to=result_loc)
+
+        workers = [asyncio.create_task(queue_worker(f'worker-{i}', queue)) for i in range(1)]
+
+        # wait until the queue is fully processed or a worker raises
+        queue_complete = asyncio.create_task(queue.join())
+        await asyncio.wait([queue_complete, *workers],
+                            return_when=asyncio.FIRST_COMPLETED)
+
+        if not queue_complete.done():
+            queue_complete.cancel()
+            for w in workers:
+                if w.done():
+                    # will raise if worker raised
+                    w.result()
                 else:
-                    result = await edge.func(item)
+                    # cancel any workers still running
+                    w.cancel()
 
-                queue.task_done()
+    async def _process_item(self, edge, to_beaker, id, item) -> str:
+        """
+        Process a single item, returning the name of the beaker it was dispatched to.
 
-    def _process_item(self, edge, to_beaker, id, item):
+        Returns: name of destination beaker (for reporting)
+        """
         try:
             if edge.whole_record:
                 record = self._get_full_record(id)
@@ -360,6 +398,7 @@ class Pipeline:
                         to_beaker.add_item(item, id)
                         return to_beaker.name
         except Exception as e:
+            log.info("exception", exception=repr(e), id=id, item=item)
             for (
                 error_types,
                 error_beaker_name,

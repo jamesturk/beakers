@@ -245,6 +245,6 @@ def test_run_linear_error_out():
     # raise a zero division error, unhandled
     fruits.beakers["word"].add_item(Word(word="/0"))
 
-    # uncaught error, propagates
+    # uncaught error from is_fruit, propagates
     with pytest.raises(ZeroDivisionError):
         fruits.run_linear()
