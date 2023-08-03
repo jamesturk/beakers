@@ -1,6 +1,7 @@
+from databeakers.models import Edge, Seed
 import pytest
 from databeakers import Pipeline
-from databeakers.pipeline import Edge, Seed, RunMode
+from databeakers.models import RunMode
 from databeakers.exceptions import SeedError
 from examples import Word, fruits
 

@@ -1,5 +1,6 @@
+from databeakers.models import EdgeType
 from pydantic import BaseModel
-from databeakers.pipeline import Pipeline, EdgeType
+from databeakers.pipeline import Pipeline
 from databeakers.beakers import TempBeaker
 
 
