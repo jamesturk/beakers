@@ -319,16 +319,6 @@ class Pipeline:
                     # uncaught exception, log and re-raise
                     result_loc = "UNCAUGHT_EXCEPTION"
                     raise
-                except asyncio.CancelledError:
-                    # task cancelled, return quietly
-                    log.info(
-                        "task cancelled",
-                        worker=name,
-                        id=id,
-                        item=item,
-                        sent_to=result_loc,
-                    )
-                    return
                 finally:
                     queue.task_done()
                     log.info(
