@@ -504,6 +504,9 @@ class Pipeline:
                         )
                         subtasks.append(asyncio.create_task(self._run_one_item(record, error_beaker_name)))
                         break
+                else:
+                    # no error handler, re-raise
+                    raise
 
         if subtasks:
             results = await asyncio.gather(*subtasks, return_exceptions=True)
