@@ -2,7 +2,7 @@ import pytest
 from databeakers import Pipeline
 from databeakers.beakers import TempBeaker, SqliteBeaker
 from databeakers.exceptions import ItemNotFound
-from testdata import Word
+from examples import Word
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])

@@ -2,7 +2,7 @@ import pytest
 from databeakers import Pipeline
 from databeakers.pipeline import Edge, Seed, RunMode
 from databeakers.exceptions import SeedError
-from testdata import Word, fruits
+from examples import Word, fruits
 
 
 def capitalized(word: Word) -> Word:
