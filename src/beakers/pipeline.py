@@ -50,6 +50,17 @@ class Seed(BaseModel):
             )
         else:
             return f"{self.name}"
+        
+class RunMode(Enum):
+    """
+    RunMode affects how the pipeline is run.
+
+    waterfall: beakers are processed one at a time, based on a topological sort of the graph
+    river: beakers are processed in parallel, with items flowing downstream
+    """
+
+    waterfall = "waterfall"
+    river = "river"
 
 
 class RunReport(BaseModel):
@@ -57,6 +68,7 @@ class RunReport(BaseModel):
     end_time: datetime.datetime
     start_beaker: str | None
     end_beaker: str | None
+    run_mode: RunMode
     nodes: dict[str, dict[str, int]] = {}
 
 
@@ -223,13 +235,15 @@ class Pipeline:
 
     # section: running ########################################################
 
-    def run_linear(
-        self, start_beaker: str | None = None, end_beaker: str | None = None
+    def run(
+        self, 
+        run_mode: RunMode,
+        start_beaker: str | None = None, end_beaker: str | None = None,
     ) -> RunReport:
         """
-        Run the pipeline linearly.
+        Run the pipeline in waterfall mode.
 
-        In a linear run, beakers are processed one at a time, based on a
+        In a waterfall run, beakers are processed one at a time, based on a
         topological sort of the graph.
 
         This means any beaker without dependencies will be processed first,
@@ -244,14 +258,17 @@ class Pipeline:
             end_time=datetime.datetime.now(),
             start_beaker=start_beaker,
             end_beaker=end_beaker,
+            run_mode=run_mode,
             nodes={},
         )
+        log.info("run", pipeline=self)
 
-        log.info("run_linear", pipeline=self)
+        # go through each node in forward order
+        if run_mode == RunMode.waterfall:
+            return self._run_waterfall(start_beaker, end_beaker, report)
 
+    def _run_waterfall(self, start_beaker: str, end_beaker: str, report: RunReport) -> RunReport:
         started = False if start_beaker else True
-
-        # go through each node in forward order, pushing data
         for node in networkx.topological_sort(self.graph):
             # only process nodes between start and end
             if not started:
@@ -264,14 +281,17 @@ class Pipeline:
             if end_beaker and node == end_beaker:
                 log.info("partial run end", node=node)
                 break
-            report.nodes[node] = self._run_node_linear(node)
+
+            # push data from this node to downstream nodes
+            report.nodes[node] = self._run_node_waterfall(node)
+            
         return report
 
     def _get_full_record(self, id: str) -> Record:
         """
         Get the full record for a given id.
 
-        This isn't the most efficient, but for linear runs
+        This isn't the most efficient, but for waterfall runs
         the alternative is to store all records in memory.
         """
         rec = Record(id=id)
@@ -282,9 +302,9 @@ class Pipeline:
                 pass
         return rec
 
-    def _run_node_linear(self, node: str) -> dict[str, int]:
+    def _run_node_waterfall(self, node: str) -> dict[str, int]:
         """
-        Run a single node in a linear run, returning a report of items dispatched.
+        Run a single node in a waterfall run, returning a report of items dispatched.
         """
         loop = asyncio.new_event_loop()
         # store count of dispatched items

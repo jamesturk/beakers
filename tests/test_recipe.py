@@ -1,6 +1,6 @@
 import pytest
 from beakers import Pipeline
-from beakers.pipeline import Edge, Seed
+from beakers.pipeline import Edge, Seed, RunMode
 from beakers.exceptions import SeedError
 from testdata import Word, fruits
 
@@ -180,11 +180,11 @@ def test_graph_data_multiple_rank():
     assert gd[4]["rank"] == 3
 
 
-def test_run_linear():
+def test_run_waterfall():
     fruits.reset()
     fruits.run_seed("abc")
     assert len(fruits.beakers["word"]) == 3
-    report = fruits.run_linear()
+    report = fruits.run(RunMode.waterfall)
 
     assert report.start_beaker is None
     assert report.end_beaker is None
@@ -201,14 +201,14 @@ def test_run_linear():
     assert len(fruits.beakers["sentence"]) == 2
 
 
-def test_run_linear_twice():
+def test_run_twice():
     fruits.reset()
     fruits.run_seed("abc")
     assert len(fruits.beakers["word"]) == 3
-    fruits.run_linear()
+    fruits.run(RunMode.waterfall)
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
-    second_report = fruits.run_linear()
+    second_report = fruits.run(RunMode.waterfall)
 
     assert second_report.nodes["word"]["_already_processed"] == 3
     # TODO: this should be three, since the first run should have
@@ -220,11 +220,11 @@ def test_run_linear_twice():
     assert len(fruits.beakers["fruit"]) == 2
 
 
-def test_run_linear_errormap():
+def test_run_waterfall_errormap():
     fruits.reset()
     fruits.run_seed("errors")  # [100, "pear", "ERROR"]
     assert len(fruits.beakers["word"]) == 3
-    report = fruits.run_linear()
+    report = fruits.run(RunMode.waterfall)
 
     # 100 winds up in non-words, two go on
     assert report.nodes["word"]["_already_processed"] == 0
@@ -239,7 +239,7 @@ def test_run_linear_errormap():
     assert len(fruits.beakers["fruit"]) == 1
 
 
-def test_run_linear_error_out():
+def test_run_waterfall_error_out():
     fruits.reset()
 
     # raise a zero division error, unhandled
@@ -247,4 +247,4 @@ def test_run_linear_error_out():
 
     # uncaught error from is_fruit, propagates
     with pytest.raises(ZeroDivisionError):
-        fruits.run_linear()
+        fruits.run(RunMode.waterfall)
