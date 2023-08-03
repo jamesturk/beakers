@@ -67,8 +67,9 @@ class ErrorType(BaseModel):
 
 
 class Pipeline:
-    def __init__(self, name: str, db_name: str = "beakers.db"):
+    def __init__(self, name: str, db_name: str = "beakers.db", *, num_workers: int = 1):
         self.name = name
+        self.num_workers = num_workers
         self.graph = networkx.DiGraph()
         self.beakers: dict[str, Beaker] = {}
         self.seeds: dict[str, tuple[str, Callable[[], Iterable[BaseModel]]]] = {}
@@ -311,13 +312,13 @@ class Pipeline:
                 to_process=len(from_beaker) - len(already_processed),
                 already_processed=len(already_processed),
             )
-            partial_result = loop.run_until_complete(self._run_edge_async(loop, from_beaker, to_beaker, edge, already_processed))
+            partial_result = loop.run_until_complete(self._run_edge_async(from_beaker, to_beaker, edge, already_processed))
             for k, v in partial_result.items():
                 node_report[k] += v
 
         return node_report
     
-    async def _run_edge_async(self, loop, from_beaker: Beaker, to_beaker: Beaker, edge: Edge, already_processed: set[str]) -> dict[str, int]:
+    async def _run_edge_async(self, from_beaker: Beaker, to_beaker: Beaker, edge: Edge, already_processed: set[str]) -> dict[str, int]:
         queue = asyncio.Queue()
         node_report: dict[str, int] = defaultdict(int)
 
@@ -355,12 +356,13 @@ class Pipeline:
                     queue.task_done()
                     log.info("task done", worker=name, id=id, item=item, sent_to=result_loc)
 
-        workers = [asyncio.create_task(queue_worker(f'worker-{i}', queue)) for i in range(4)]
+        workers = [asyncio.create_task(queue_worker(f'worker-{i}', queue)) for i in range(self.num_workers)]
 
         # wait until the queue is fully processed or a worker raises
         queue_complete = asyncio.create_task(queue.join())
         await asyncio.wait([queue_complete, *workers], return_when=asyncio.FIRST_COMPLETED)
 
+        # cancel any remaining workers and pull exception to raise
         to_raise = None
         for w in workers:
             if not w.done():
