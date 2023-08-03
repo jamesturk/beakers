@@ -343,33 +343,32 @@ class Pipeline:
                     with self.db:
                         result_loc = await self._process_item(edge, to_beaker, id, item)
                     node_report[result_loc] += 1
-                    queue.task_done()
                 except Exception:
                     # uncaught exception, log and re-raise
                     result_loc = "UNCAUGHT_EXCEPTION"
                     raise
+                except asyncio.CancelledError:
+                    # task cancelled, return quietly
+                    log.info("task cancelled", worker=name, id=id, item=item, sent_to=result_loc)
+                    return
                 finally:
+                    queue.task_done()
                     log.info("task done", worker=name, id=id, item=item, sent_to=result_loc)
 
-        workers = [asyncio.create_task(queue_worker(f'worker-{i}', queue)) for i in range(1)]
+        workers = [asyncio.create_task(queue_worker(f'worker-{i}', queue)) for i in range(4)]
 
         # wait until the queue is fully processed or a worker raises
         queue_complete = asyncio.create_task(queue.join())
-        await asyncio.wait([queue_complete, *workers],
-                            return_when=asyncio.FIRST_COMPLETED)
+        await asyncio.wait([queue_complete, *workers], return_when=asyncio.FIRST_COMPLETED)
 
-        # an error occurred, clean up and re-raise
         to_raise = None
-        if not queue_complete.done():
-            queue_complete.cancel()
-            for w in workers:
-                if w.done():
-                    to_raise = w.exception()
-                else:
-                    # cancel any workers still running
-                    w.cancel()
+        for w in workers:
+            if not w.done():
+                w.cancel()
+            else:
+                to_raise = w.exception()
+        if to_raise:
             raise to_raise
-        
         return node_report
 
     async def _process_item(self, edge, to_beaker, id, item) -> str:
