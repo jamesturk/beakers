@@ -445,14 +445,14 @@ class Pipeline:
                             # update record to include the result
                             record[to_b] = result
                             subtasks.append(
-                                asyncio.create_task(self._run_one_item(record, to_b, end_b))
+                                self._run_one_item(record, to_b, end_b)
                             )
                     case EdgeType.conditional:
                         if result:
                             to_beaker.add_item(record[cur_b], record.id)
                             from_to.append((cur_b, to_b))
                             subtasks.append(
-                                asyncio.create_task(self._run_one_item(record, to_b, end_b))
+                                self._run_one_item(record, to_b, end_b)
                             )
             except Exception as e:
                 log.info("exception", exception=repr(e), record=record)
@@ -472,15 +472,14 @@ class Pipeline:
                         )
                         from_to.append((cur_b, error_beaker_name))
                         subtasks.append(
-                            asyncio.create_task(
                                 self._run_one_item(record, error_beaker_name, end_b)
-                            )
                         )
                         break
                 else:
                     # no error handler, re-raise
                     raise
 
+        log.info("river subtasks", cur_b=cur_b, subtasks=len(subtasks), stop_early=stop_early)
         if subtasks and not stop_early:
             results = await asyncio.gather(*subtasks, return_exceptions=True)
             for r in results:

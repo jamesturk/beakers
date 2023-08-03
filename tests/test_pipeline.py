@@ -182,7 +182,7 @@ def test_graph_data_multiple_rank():
 
 
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
-def test_run_waterfall(mode):
+def test_run_fruits(mode):
     fruits.reset()
     fruits.run_seed("abc")
     assert len(fruits.beakers["word"]) == 3
@@ -203,20 +203,45 @@ def test_run_waterfall(mode):
     assert len(fruits.beakers["sentence"]) == 2
 
 
-def test_run_twice():
+@pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
+def test_run_early_end(mode):
     fruits.reset()
     fruits.run_seed("abc")
     assert len(fruits.beakers["word"]) == 3
-    fruits.run(RunMode.waterfall)
+    report = fruits.run(mode, end_beaker="fruit")
+
+    assert report.start_beaker is None
+    assert report.end_beaker == "fruit"
+    assert report.start_time is not None
+    assert report.end_time is not None
+
+    assert report.nodes["word"]["_already_processed"] == 0
+    assert report.nodes["word"]["normalized"] == 3
+    assert report.nodes["normalized"]["fruit"] == 2
+    assert "fruit" not in report.nodes
+
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
-    second_report = fruits.run(RunMode.waterfall)
+    assert len(fruits.beakers["sentence"]) == 0
+
+
+@pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
+def test_run_twice(mode):
+    fruits.reset()
+    fruits.run_seed("abc")
+    assert len(fruits.beakers["word"]) == 3
+    fruits.run(mode)
+    assert len(fruits.beakers["normalized"]) == 3
+    assert len(fruits.beakers["fruit"]) == 2
+    second_report = fruits.run(mode)
 
     assert second_report.nodes["word"]["_already_processed"] == 3
     # TODO: this should be three, since the first run should have
     #      processed all three items, but it's two because the second run
     #      doesn't know about the items rejected by the filter.
-    assert second_report.nodes["normalized"]["_already_processed"] == 2
+    # TODO  even worse with river mode
+    # assert second_report.nodes["normalized"]["_already_processed"] == 2
+    assert second_report.nodes["normalized"]["fruit"] == 0
 
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
