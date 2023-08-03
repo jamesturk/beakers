@@ -6,7 +6,7 @@ authors = ["James Turk <dev@jamesturk.net>"]
 readme = "README.md"
 
 [tool.poetry.scripts]
-bkr = 'beakers.cli:app'
+bkr = 'databeakers.cli:app'
 
 
 [tool.poetry.dependencies]
