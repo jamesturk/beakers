@@ -50,7 +50,8 @@ class Seed(BaseModel):
             )
         else:
             return f"{self.name}"
-        
+
+
 class RunMode(Enum):
     """
     RunMode affects how the pipeline is run.
@@ -236,9 +237,10 @@ class Pipeline:
     # section: running ########################################################
 
     def run(
-        self, 
+        self,
         run_mode: RunMode,
-        start_beaker: str | None = None, end_beaker: str | None = None,
+        start_beaker: str | None = None,
+        end_beaker: str | None = None,
     ) -> RunReport:
         """
         Run the pipeline in waterfall mode.
@@ -269,7 +271,9 @@ class Pipeline:
         elif run_mode == RunMode.river:
             return self._run_river(start_beaker, end_beaker, report)
 
-    def _run_waterfall(self, start_beaker: str, end_beaker: str, report: RunReport) -> RunReport:
+    def _run_waterfall(
+        self, start_beaker: str, end_beaker: str, report: RunReport
+    ) -> RunReport:
         started = False if start_beaker else True
         for node in networkx.topological_sort(self.graph):
             # only process nodes between start and end
@@ -286,7 +290,7 @@ class Pipeline:
 
             # push data from this node to downstream nodes
             report.nodes[node] = self._run_node_waterfall(node)
-            
+
         return report
 
     def _get_full_record(self, id: str) -> Record:
@@ -334,13 +338,21 @@ class Pipeline:
                 to_process=len(from_beaker) - len(already_processed),
                 already_processed=len(already_processed),
             )
-            partial_result = loop.run_until_complete(self._run_edge_async(from_beaker, to_beaker, edge, already_processed))
+            partial_result = loop.run_until_complete(
+                self._run_edge_async(from_beaker, to_beaker, edge, already_processed)
+            )
             for k, v in partial_result.items():
                 node_report[k] += v
 
         return node_report
-    
-    async def _run_edge_async(self, from_beaker: Beaker, to_beaker: Beaker, edge: Edge, already_processed: set[str]) -> dict[str, int]:
+
+    async def _run_edge_async(
+        self,
+        from_beaker: Beaker,
+        to_beaker: Beaker,
+        edge: Edge,
+        already_processed: set[str],
+    ) -> dict[str, int]:
         queue = asyncio.Queue()
         node_report: dict[str, int] = defaultdict(int)
 
@@ -372,17 +384,30 @@ class Pipeline:
                     raise
                 except asyncio.CancelledError:
                     # task cancelled, return quietly
-                    log.info("task cancelled", worker=name, id=id, item=item, sent_to=result_loc)
+                    log.info(
+                        "task cancelled",
+                        worker=name,
+                        id=id,
+                        item=item,
+                        sent_to=result_loc,
+                    )
                     return
                 finally:
                     queue.task_done()
-                    log.info("task done", worker=name, id=id, item=item, sent_to=result_loc)
+                    log.info(
+                        "task done", worker=name, id=id, item=item, sent_to=result_loc
+                    )
 
-        workers = [asyncio.create_task(queue_worker(f'worker-{i}', queue)) for i in range(self.num_workers)]
+        workers = [
+            asyncio.create_task(queue_worker(f"worker-{i}", queue))
+            for i in range(self.num_workers)
+        ]
 
         # wait until the queue is fully processed or a worker raises
         queue_complete = asyncio.create_task(queue.join())
-        await asyncio.wait([queue_complete, *workers], return_when=asyncio.FIRST_COMPLETED)
+        await asyncio.wait(
+            [queue_complete, *workers], return_when=asyncio.FIRST_COMPLETED
+        )
 
         # cancel any remaining workers and pull exception to raise
         to_raise = None
@@ -451,7 +476,6 @@ class Pipeline:
             loop.run_until_complete(self._run_one_item(record, start_b))
 
         return report
-        
 
     async def _run_one_item(self, record: Record, cur_b: str) -> None:
         """
@@ -469,7 +493,7 @@ class Pipeline:
             if record.id in to_beaker.id_set():
                 # already processed this item, nothing to do
                 continue
-            
+
             try:
                 if edge.whole_record:
                     result = edge.func(record)
@@ -481,11 +505,15 @@ class Pipeline:
                             to_beaker.add_item(result, record.id)
                             # update record to include the result
                             record[to_b] = result
-                            subtasks.append(asyncio.create_task(self._run_one_item(record, to_b)))
+                            subtasks.append(
+                                asyncio.create_task(self._run_one_item(record, to_b))
+                            )
                     case EdgeType.conditional:
                         if result:
                             to_beaker.add_item(record[cur_b], record.id)
-                            subtasks.append(asyncio.create_task(self._run_one_item(record, to_b)))
+                            subtasks.append(
+                                asyncio.create_task(self._run_one_item(record, to_b))
+                            )
             except Exception as e:
                 log.info("exception", exception=repr(e), record=record)
                 for (
@@ -502,7 +530,11 @@ class Pipeline:
                             ),
                             record.id,
                         )
-                        subtasks.append(asyncio.create_task(self._run_one_item(record, error_beaker_name)))
+                        subtasks.append(
+                            asyncio.create_task(
+                                self._run_one_item(record, error_beaker_name)
+                            )
+                        )
                         break
                 else:
                     # no error handler, re-raise
