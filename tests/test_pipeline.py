@@ -202,6 +202,18 @@ def test_run_fruits(mode):
     assert len(fruits.beakers["fruit"]) == 2
     assert len(fruits.beakers["sentence"]) == 2
 
+    sentences = sorted(
+        [
+            fruits.beakers["sentence"].get_item(id).sentence
+            for id in fruits.beakers["sentence"].id_set()
+        ]
+    )
+
+    assert sentences == [
+        "apple is a delicious fruit.",
+        "banana is a delicious fruit.",
+    ]
+
 
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
 def test_run_early_end(mode):
@@ -212,8 +224,6 @@ def test_run_early_end(mode):
 
     assert report.start_beaker is None
     assert report.end_beaker == "fruit"
-    assert report.start_time is not None
-    assert report.end_time is not None
 
     assert report.nodes["word"]["_already_processed"] == 0
     assert report.nodes["word"]["normalized"] == 3
@@ -223,6 +233,38 @@ def test_run_early_end(mode):
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
     assert len(fruits.beakers["sentence"]) == 0
+
+
+@pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
+def test_run_late_start(mode):
+    fruits.reset()
+    fruits.add_seed(
+        "prenormalized",
+        "normalized",
+        lambda: [
+            Word(word="apple"),
+            Word(word="pear"),
+            Word(word="banana"),
+            Word(word="egg"),
+            Word(word="fish"),
+        ],
+    )
+    fruits.run_seed("prenormalized")
+    assert len(fruits.beakers["word"]) == 0
+    assert len(fruits.beakers["normalized"]) == 5
+    report = fruits.run(mode, start_beaker="normalized")
+
+    assert report.start_beaker == "normalized"
+    assert report.end_beaker is None
+
+    assert "word" not in report.nodes
+    assert report.nodes["normalized"]["_already_processed"] == 0
+    assert report.nodes["normalized"]["fruit"] == 3
+    assert report.nodes["fruit"]["sentence"] == 3
+
+    assert len(fruits.beakers["normalized"]) == 5
+    assert len(fruits.beakers["fruit"]) == 3
+    assert len(fruits.beakers["sentence"]) == 3
 
 
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])

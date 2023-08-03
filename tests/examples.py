@@ -68,7 +68,7 @@ fruits.add_transform(
 fruits.add_transform(
     "fruit",
     "sentence",
-    lambda r: Sentence(sentence=f"{r['word'].word} is a delicious fruit."),
+    lambda r: Sentence(sentence=f"{r['normalized'].word} is a delicious fruit."),
     whole_record=True,
 )
 fruits.add_seed(
