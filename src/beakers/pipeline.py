@@ -465,26 +465,32 @@ class Pipeline:
                 raise
 
     def _run_river(self, start_b, end_b, report: RunReport) -> RunReport:
+        loop = asyncio.new_event_loop()
         if not start_b:
             start_b = list(networkx.topological_sort(self.graph))[0]
         start_beaker = self.beakers[start_b]
-        loop = asyncio.new_event_loop()
+        report.nodes = defaultdict(lambda: defaultdict(int))
 
         for id in start_beaker.id_set():
             record = self._get_full_record(id)
             log.info("river record", id=id, record=record)
-            loop.run_until_complete(self._run_one_item(record, start_b, end_b))
+            for from_b, to_b in loop.run_until_complete(self._run_one_item(record, start_b, end_b)):
+                report.nodes[from_b][to_b] += 1
 
         return report
 
-    async def _run_one_item(self, record: Record, cur_b: str, end_b: str) -> None:
+    async def _run_one_item(self, record: Record, cur_b: str, end_b: str) -> list[tuple[str, str]]:
         """
         Run a single item through a single beaker.
 
         Calls itself recursively to fan out to downstream beakers.
+
+        Return list of (from, to) pairs.
         """
         subtasks = []
         stop_early = False
+        from_to = []
+
         # fan an item out to all downstream beakers
         for _, to_b, e in self.graph.out_edges(cur_b, data=True):
             edge = e["edge"]
@@ -492,6 +498,7 @@ class Pipeline:
 
             # TODO: better way to do this
             if record.id in to_beaker.id_set():
+                from_to.append((cur_b, "_already_processed"))
                 # already processed this item, nothing to do
                 continue
 
@@ -507,6 +514,7 @@ class Pipeline:
                     case EdgeType.transform:
                         if result is not None:
                             to_beaker.add_item(result, record.id)
+                            from_to.append((cur_b, to_b))
                             # update record to include the result
                             record[to_b] = result
                             subtasks.append(
@@ -515,6 +523,7 @@ class Pipeline:
                     case EdgeType.conditional:
                         if result:
                             to_beaker.add_item(record[cur_b], record.id)
+                            from_to.append((cur_b, to_b))
                             subtasks.append(
                                 asyncio.create_task(self._run_one_item(record, to_b, end_b))
                             )
@@ -534,6 +543,7 @@ class Pipeline:
                             ),
                             record.id,
                         )
+                        from_to.append((cur_b, error_beaker_name))
                         subtasks.append(
                             asyncio.create_task(
                                 self._run_one_item(record, error_beaker_name, end_b)
@@ -549,3 +559,7 @@ class Pipeline:
             for r in results:
                 if isinstance(r, Exception):
                     raise r
+                else:
+                    from_to.extend(r)
+
+        return from_to
