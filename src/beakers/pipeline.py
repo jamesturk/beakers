@@ -266,6 +266,8 @@ class Pipeline:
         # go through each node in forward order
         if run_mode == RunMode.waterfall:
             return self._run_waterfall(start_beaker, end_beaker, report)
+        elif run_mode == RunMode.river:
+            return self._run_river(start_beaker, end_beaker, report)
 
     def _run_waterfall(self, start_beaker: str, end_beaker: str, report: RunReport) -> RunReport:
         started = False if start_beaker else True
@@ -436,3 +438,67 @@ class Pipeline:
             else:
                 # no error handler, re-raise
                 raise
+
+    def _run_river(self, start_b, end_b, report: RunReport) -> RunReport:
+        if not start_b:
+            start_b = list(networkx.topological_sort(self.graph))[0]
+        start_beaker = self.beakers[start_b]
+        loop = asyncio.new_event_loop()
+
+        for id in start_beaker.id_set():
+            item = start_beaker.get_item(id)
+            log.info("river item", id=id, item=item)
+            loop.run_until_complete(self._run_one_item(id, item, start_b))
+
+        return report
+        
+
+    async def _run_one_item(self, id_: str, item, cur_b: str) -> None:
+        """
+        Run a single item through a single beaker.
+
+        Calls itself recursively to fan out to downstream beakers.
+        """
+        subtasks = []
+        # fan an item out to all downstream beakers
+        for _, to_b, e in self.graph.out_edges(cur_b, data=True):
+            edge = e["edge"]
+            to_beaker = self.beakers[to_b]
+
+            if id_ in to_beaker.id_set():
+                # already processed this item, nothing to do
+                # TODO: handle whole_record
+                continue
+            
+            try:
+                result = edge.func(item)
+                match edge.edge_type:
+                    case EdgeType.transform:
+                        if result is not None:
+                            to_beaker.add_item(result, id_)
+                            subtasks.append(asyncio.create_task(self._run_one_item(id_, result, to_b)))
+                    case EdgeType.conditional:
+                        if result:
+                            to_beaker.add_item(item, id_)
+                            subtasks.append(asyncio.create_task(self._run_one_item(id_, item, to_b)))
+            except Exception as e:
+                log.info("exception", exception=repr(e), id=id_, item=item)
+                for (
+                    error_types,
+                    error_beaker_name,
+                ) in edge.error_map.items():
+                    if isinstance(e, error_types):
+                        error_beaker = self.beakers[error_beaker_name]
+                        error_beaker.add_item(
+                            ErrorType(
+                                item=item,
+                                exception=str(e),
+                                exc_type=str(type(e)),
+                            ),
+                            id_,
+                        )
+                        subtasks.append(asyncio.create_task(self._run_one_item(id_, item, error_beaker_name)))
+                        break
+
+        if subtasks:
+            await asyncio.wait(subtasks)
