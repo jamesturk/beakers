@@ -18,3 +18,6 @@ class Record:
             self._data[name] = value
         else:
             raise AttributeError(f"DataObject attribute {name} already exists")
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.id})"
