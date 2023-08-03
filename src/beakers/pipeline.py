@@ -446,14 +446,14 @@ class Pipeline:
         loop = asyncio.new_event_loop()
 
         for id in start_beaker.id_set():
-            item = start_beaker.get_item(id)
-            log.info("river item", id=id, item=item)
-            loop.run_until_complete(self._run_one_item(id, item, start_b))
+            record = self._get_full_record(id)
+            log.info("river record", id=id, record=record)
+            loop.run_until_complete(self._run_one_item(record, start_b))
 
         return report
         
 
-    async def _run_one_item(self, id_: str, item, cur_b: str) -> None:
+    async def _run_one_item(self, record: Record, cur_b: str) -> None:
         """
         Run a single item through a single beaker.
 
@@ -465,24 +465,29 @@ class Pipeline:
             edge = e["edge"]
             to_beaker = self.beakers[to_b]
 
-            if id_ in to_beaker.id_set():
+            # TODO: better way to do this
+            if record.id in to_beaker.id_set():
                 # already processed this item, nothing to do
-                # TODO: handle whole_record
                 continue
             
             try:
-                result = edge.func(item)
+                if edge.whole_record:
+                    result = edge.func(record)
+                else:
+                    result = edge.func(record[cur_b])
                 match edge.edge_type:
                     case EdgeType.transform:
                         if result is not None:
-                            to_beaker.add_item(result, id_)
-                            subtasks.append(asyncio.create_task(self._run_one_item(id_, result, to_b)))
+                            to_beaker.add_item(result, record.id)
+                            # update record to include the result
+                            record[to_b] = result
+                            subtasks.append(asyncio.create_task(self._run_one_item(record, to_b)))
                     case EdgeType.conditional:
                         if result:
-                            to_beaker.add_item(item, id_)
-                            subtasks.append(asyncio.create_task(self._run_one_item(id_, item, to_b)))
+                            to_beaker.add_item(record[cur_b], record.id)
+                            subtasks.append(asyncio.create_task(self._run_one_item(record, to_b)))
             except Exception as e:
-                log.info("exception", exception=repr(e), id=id_, item=item)
+                log.info("exception", exception=repr(e), record=record)
                 for (
                     error_types,
                     error_beaker_name,
@@ -491,14 +496,17 @@ class Pipeline:
                         error_beaker = self.beakers[error_beaker_name]
                         error_beaker.add_item(
                             ErrorType(
-                                item=item,
+                                item=record[cur_b],
                                 exception=str(e),
                                 exc_type=str(type(e)),
                             ),
-                            id_,
+                            record.id,
                         )
-                        subtasks.append(asyncio.create_task(self._run_one_item(id_, item, error_beaker_name)))
+                        subtasks.append(asyncio.create_task(self._run_one_item(record, error_beaker_name)))
                         break
 
         if subtasks:
-            await asyncio.wait(subtasks)
+            results = await asyncio.gather(*subtasks, return_exceptions=True)
+            for r in results:
+                if isinstance(r, Exception):
+                    raise r

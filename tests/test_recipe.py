@@ -191,11 +191,13 @@ def test_run_waterfall(mode):
     assert report.end_beaker is None
     assert report.start_time is not None
     assert report.end_time is not None
-    # assert len(report.nodes) == 6
-    # assert report.nodes["word"]["_already_processed"] == 0
-    # assert report.nodes["word"]["normalized"] == 3
-    # assert report.nodes["normalized"]["fruit"] == 2
-    # assert report.nodes["fruit"]["sentence"] == 2
+
+    if mode == RunMode.waterfall:
+        assert len(report.nodes) == 6
+        assert report.nodes["word"]["_already_processed"] == 0
+        assert report.nodes["word"]["normalized"] == 3
+        assert report.nodes["normalized"]["fruit"] == 2
+        assert report.nodes["fruit"]["sentence"] == 2
 
     assert len(fruits.beakers["normalized"]) == 3
     assert len(fruits.beakers["fruit"]) == 2
@@ -229,14 +231,16 @@ def test_run_errormap(mode):
     report = fruits.run(mode)
 
     # 100 winds up in non-words, two go on
-    assert report.nodes["word"]["_already_processed"] == 0
-    assert report.nodes["word"]["normalized"] == 2
-    assert report.nodes["word"]["nonword"] == 1
+    if mode == RunMode.waterfall:
+        assert report.nodes["word"]["_already_processed"] == 0
+        assert report.nodes["word"]["normalized"] == 2
+        assert report.nodes["word"]["nonword"] == 1
+        # ERROR winds up in errors, one goes on
+        assert report.nodes["normalized"]["errors"] == 1
+        assert report.nodes["normalized"]["fruit"] == 1
+
     assert len(fruits.beakers["nonword"]) == 1
     assert len(fruits.beakers["normalized"]) == 2
-    # ERROR winds up in errors, one goes on
-    assert report.nodes["normalized"]["errors"] == 1
-    assert report.nodes["normalized"]["fruit"] == 1
     assert len(fruits.beakers["errors"]) == 1
     assert len(fruits.beakers["fruit"]) == 1
 
