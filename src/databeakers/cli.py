@@ -8,8 +8,8 @@ from pprint import pprint
 from typing import List, Optional
 from typing_extensions import Annotated
 
-from beakers.pipeline import RunMode
-from beakers.exceptions import SeedError
+from .pipeline import RunMode
+from .exceptions import SeedError
 
 app = typer.Typer()
 

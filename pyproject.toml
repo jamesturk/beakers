@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "beakers"
+name = "databeakers"
 version = "0.1.0"
 description = ""
 authors = ["James Turk <dev@jamesturk.net>"]

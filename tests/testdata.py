@@ -1,6 +1,6 @@
 from pydantic import BaseModel
-from beakers.pipeline import Pipeline, EdgeType
-from beakers.beakers import TempBeaker
+from databeakers.pipeline import Pipeline, EdgeType
+from databeakers.beakers import TempBeaker
 
 
 class IdOnly(BaseModel):

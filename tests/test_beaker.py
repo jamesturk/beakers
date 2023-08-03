@@ -1,7 +1,7 @@
 import pytest
-from beakers import Pipeline
-from beakers.beakers import TempBeaker, SqliteBeaker
-from beakers.exceptions import ItemNotFound
+from databeakers import Pipeline
+from databeakers.beakers import TempBeaker, SqliteBeaker
+from databeakers.exceptions import ItemNotFound
 from testdata import Word
 
 

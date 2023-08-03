@@ -1,5 +1,5 @@
 from typer.testing import CliRunner
-from beakers.cli import app
+from databeakers.cli import app
 from testdata import fruits
 
 """

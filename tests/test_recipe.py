@@ -1,7 +1,7 @@
 import pytest
-from beakers import Pipeline
-from beakers.pipeline import Edge, Seed, RunMode
-from beakers.exceptions import SeedError
+from databeakers import Pipeline
+from databeakers.pipeline import Edge, Seed, RunMode
+from databeakers.exceptions import SeedError
 from testdata import Word, fruits
 
 
