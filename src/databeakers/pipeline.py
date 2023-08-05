@@ -66,7 +66,12 @@ class Pipeline:
         whole_record: bool = False,
     ) -> None:
         if name is None:
-            name = func.__name__ if func.__name__ != "<lambda>" else "λ"
+            if hasattr(func, "__class__"):
+                name = repr(func)
+            elif func.__name__ == "<lambda>":
+                name = "λ"
+            else:
+                name = func.__name__
         edge = Edge(
             name=name,
             edge_type=edge_type,
@@ -207,9 +212,11 @@ class Pipeline:
             return self._run_waterfall(start_beaker, end_beaker, report)
         elif run_mode == RunMode.river:
             return self._run_river(start_beaker, end_beaker, report)
+        else:
+            raise ValueError(f"Unknown run mode {run_mode}")
 
     def _run_waterfall(
-        self, start_beaker: str, end_beaker: str, report: RunReport
+        self, start_beaker: str | None, end_beaker: str | None, report: RunReport
     ) -> RunReport:
         started = False if start_beaker else True
         for node in networkx.topological_sort(self.graph):
@@ -253,11 +260,6 @@ class Pipeline:
         # store count of dispatched items
         node_report: dict[str, int] = defaultdict(int)
 
-        # convert coroutine to function if needed
-        # if inspect.iscoroutinefunction(edge.func):
-        #     def e_func(x: BaseModel) -> BaseModel:
-        #         return loop.run_until_complete(edge.func(x))
-
         # get outbound edges
         edges = self.graph.out_edges(node, data=True)
         for from_b, to_b, e in edges:
@@ -290,7 +292,7 @@ class Pipeline:
         edge: Edge,
         already_processed: set[str],
     ) -> dict[str, int]:
-        queue = asyncio.Queue()
+        queue: asyncio.Queue[tuple[str, Record]] = asyncio.Queue()
         node_report: dict[str, int] = defaultdict(int)
 
         # enqueue all items
@@ -359,17 +361,8 @@ class Pipeline:
                 result = edge.func(record)
             else:
                 result = edge.func(item)
-            match edge.edge_type:
-                case EdgeType.transform:
-                    # transform: add result to to_beaker (if not None)
-                    if result is not None:
-                        to_beaker.add_item(result, id)
-                        return to_beaker.name
-                case EdgeType.conditional:
-                    # conditional: add item to to_beaker if e_func returns truthy
-                    if result:
-                        to_beaker.add_item(item, id)
-                        return to_beaker.name
+            if inspect.isawaitable(result):
+                result = await result
         except Exception as e:
             log.info("exception", exception=repr(e), id=id, item=item)
             for (
@@ -387,9 +380,26 @@ class Pipeline:
                         id,
                     )
                     return error_beaker.name
-            else:
-                # no error handler, re-raise
-                raise
+            # no error handler, re-raise
+            raise
+
+        match edge.edge_type:
+            case EdgeType.transform:
+                # transform: add result to to_beaker (if not None)
+                if result is not None:
+                    to_beaker.add_item(result, id)
+                    return to_beaker.name
+                else:
+                    return "_none"
+            case EdgeType.conditional:
+                # conditional: add item to to_beaker if e_func returns truthy
+                if result:
+                    to_beaker.add_item(item, id)
+                    return to_beaker.name
+                else:
+                    return "_none"
+            case _:
+                raise ValueError(f"Unknown edge type {edge.edge_type}")
 
     def _run_river(self, start_b, end_b, report: RunReport) -> RunReport:
         loop = asyncio.new_event_loop()
@@ -401,12 +411,16 @@ class Pipeline:
         for id in start_beaker.id_set():
             record = self._get_full_record(id)
             log.info("river record", id=id, record=record)
-            for from_b, to_b in loop.run_until_complete(self._run_one_item(record, start_b, end_b)):
+            for from_b, to_b in loop.run_until_complete(
+                self._run_one_item(record, start_b, end_b)
+            ):
                 report.nodes[from_b][to_b] += 1
 
         return report
 
-    async def _run_one_item(self, record: Record, cur_b: str, end_b: str) -> list[tuple[str, str]]:
+    async def _run_one_item(
+        self, record: Record, cur_b: str, end_b: str
+    ) -> list[tuple[str, str]]:
         """
         Run a single item through a single beaker.
 
@@ -437,6 +451,9 @@ class Pipeline:
                     result = edge.func(record)
                 else:
                     result = edge.func(record[cur_b])
+                if inspect.isawaitable(result):
+                    result = await result
+
                 match edge.edge_type:
                     case EdgeType.transform:
                         if result is not None:
@@ -444,16 +461,12 @@ class Pipeline:
                             from_to.append((cur_b, to_b))
                             # update record to include the result
                             record[to_b] = result
-                            subtasks.append(
-                                self._run_one_item(record, to_b, end_b)
-                            )
+                            subtasks.append(self._run_one_item(record, to_b, end_b))
                     case EdgeType.conditional:
                         if result:
                             to_beaker.add_item(record[cur_b], record.id)
                             from_to.append((cur_b, to_b))
-                            subtasks.append(
-                                self._run_one_item(record, to_b, end_b)
-                            )
+                            subtasks.append(self._run_one_item(record, to_b, end_b))
             except Exception as e:
                 log.info("exception", exception=repr(e), record=record)
                 for (
@@ -472,14 +485,16 @@ class Pipeline:
                         )
                         from_to.append((cur_b, error_beaker_name))
                         subtasks.append(
-                                self._run_one_item(record, error_beaker_name, end_b)
+                            self._run_one_item(record, error_beaker_name, end_b)
                         )
                         break
                 else:
                     # no error handler, re-raise
                     raise
 
-        log.info("river subtasks", cur_b=cur_b, subtasks=len(subtasks), stop_early=stop_early)
+        log.info(
+            "river subtasks", cur_b=cur_b, subtasks=len(subtasks), stop_early=stop_early
+        )
         if subtasks and not stop_early:
             results = await asyncio.gather(*subtasks, return_exceptions=True)
             for r in results:

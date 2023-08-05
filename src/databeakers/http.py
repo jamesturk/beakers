@@ -19,13 +19,11 @@ class HttpRequest:
     Filter that converts from a beaker with a URL to a beaker with an HTTP response.
     """
 
-    def __init__(self, beaker: str, field: str):
+    def __init__(self, field: str = "url"):
         """
         Args:
-            beaker: The name of the beaker that contains the URL.
             field: The name of the field in the beaker that contains the URL.
         """
-        self.beaker = beaker
         self.field = field
 
     async def __call__(self, item: BaseModel) -> HttpResponse:
