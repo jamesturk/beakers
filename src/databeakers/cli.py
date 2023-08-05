@@ -103,12 +103,13 @@ def run(
     input: Annotated[Optional[List[str]], typer.Option(...)] = None,
     start: Optional[str] = typer.Option(None),
     end: Optional[str] = typer.Option(None),
+    mode: RunMode = typer.Option("waterfall"),
 ) -> None:
     has_data = any(ctx.obj.beakers.values())
     if not input and not has_data:
         typer.secho("No data! Run seed(s) first.", fg=typer.colors.RED)
         raise typer.Exit(1)
-    ctx.obj.run(RunMode.waterfall, start, end)
+    ctx.obj.run(mode, start, end)
 
 
 if __name__ == "__main__":  # pragma: no cover
