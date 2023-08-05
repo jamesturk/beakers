@@ -380,8 +380,9 @@ class Pipeline:
                         id,
                     )
                     return error_beaker.name
-            # no error handler, re-raise
-            raise
+            else:
+                # no error handler, re-raise
+                raise
 
         match edge.edge_type:
             case EdgeType.transform:
@@ -453,20 +454,6 @@ class Pipeline:
                     result = edge.func(record[cur_b])
                 if inspect.isawaitable(result):
                     result = await result
-
-                match edge.edge_type:
-                    case EdgeType.transform:
-                        if result is not None:
-                            to_beaker.add_item(result, record.id)
-                            from_to.append((cur_b, to_b))
-                            # update record to include the result
-                            record[to_b] = result
-                            subtasks.append(self._run_one_item(record, to_b, end_b))
-                    case EdgeType.conditional:
-                        if result:
-                            to_beaker.add_item(record[cur_b], record.id)
-                            from_to.append((cur_b, to_b))
-                            subtasks.append(self._run_one_item(record, to_b, end_b))
             except Exception as e:
                 log.info("exception", exception=repr(e), record=record)
                 for (
@@ -491,6 +478,19 @@ class Pipeline:
                 else:
                     # no error handler, re-raise
                     raise
+            match edge.edge_type:
+                case EdgeType.transform:
+                    if result is not None:
+                        to_beaker.add_item(result, record.id)
+                        from_to.append((cur_b, to_b))
+                        # update record to include the result
+                        record[to_b] = result
+                        subtasks.append(self._run_one_item(record, to_b, end_b))
+                case EdgeType.conditional:
+                    if result:
+                        to_beaker.add_item(record[cur_b], record.id)
+                        from_to.append((cur_b, to_b))
+                        subtasks.append(self._run_one_item(record, to_b, end_b))
 
         log.info(
             "river subtasks", cur_b=cur_b, subtasks=len(subtasks), stop_early=stop_early
