@@ -13,6 +13,11 @@ from .beakers import Beaker, SqliteBeaker, TempBeaker
 from .record import Record
 from .exceptions import ItemNotFound, SeedError
 
+# !!! Note:
+# by convention, a variable ending with _b is a beaker name
+# & a variable ending with _beaker is a beaker instance
+# _beaker_name is sometimes used to be explicit, and is also a name
+
 log = get_logger()
 
 
@@ -264,6 +269,9 @@ class Pipeline:
             from_beaker = self.beakers[from_b]
             to_beaker = self.beakers[to_b]
             edge = e["edge"]
+            all_upstream = to_beaker.id_set()
+            for error_b in edge.error_map.values():
+                all_upstream |= self.beakers[error_b].id_set()
             already_processed = from_beaker.id_set() & to_beaker.id_set()
             node_report["_already_processed"] += len(already_processed)
 

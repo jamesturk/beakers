@@ -1,9 +1,9 @@
-from databeakers.models import Edge, Seed
+from typing import Generator
 import pytest
 from databeakers import Pipeline
-from databeakers.models import RunMode
 from databeakers.exceptions import SeedError
-from examples import Word, fruits
+from databeakers.models import Edge, Seed, RunMode
+from examples import Word, Sentence, fruits
 
 
 def capitalized(word: Word) -> Word:
@@ -320,3 +320,52 @@ def test_run_error_out(mode):
     # uncaught error from is_fruit, propagates
     with pytest.raises(ZeroDivisionError):
         fruits.run(mode)
+
+
+@pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
+def test_run_async_functions_in_pipeline(mode):
+    async def sentence_maker(word: Word) -> Sentence:
+        return Sentence(sentence=f"{word.word} was processed asynchronously.")
+
+    def words_seed() -> Generator[Word]:
+        for n in range(10):
+            yield from [
+                Word(word=f"up {n}"),
+                Word(word=f"down {n}"),
+                Word(word=f"strange {n}"),
+                Word(word=f"charm {n}"),
+                Word(word=f"top {n}"),
+                Word(word=f"bottom {n}"),
+            ]
+
+    async_test = Pipeline("async_test", "async_test.db")
+    async_test.add_beaker("word", Word)
+    async_test.add_beaker("sentence", Sentence)
+    async_test.add_transform(
+        "word",
+        "sentence",
+        sentence_maker,
+    )
+    async_test.add_seed("words", "word", words_seed)
+
+    async_test.reset()
+    async_test.run_seed("words")
+    assert len(async_test.beakers["word"]) == 60
+    report = async_test.run(mode)
+
+    assert report.start_beaker is None
+    assert report.end_beaker is None
+    assert report.start_time is not None
+    assert report.end_time is not None
+
+    assert report.nodes["word"]["_already_processed"] == 0
+    assert report.nodes["word"]["sentence"] == 60
+
+    assert len(async_test.beakers["sentence"]) == 60
+
+    sentences = [
+        async_test.beakers["sentence"].get_item(id).sentence
+        for id in async_test.beakers["sentence"].id_set()
+    ]
+
+    assert len(sentences) == 60
