@@ -112,5 +112,20 @@ def run(
     ctx.obj.run(mode, start, end)
 
 
+@app.command()
+def clear(
+    ctx: typer.Context,
+    beaker_name: str,
+) -> None:
+    if beaker_name not in ctx.obj.beakers:
+        typer.secho(f"Beaker {beaker_name} not found", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    else:
+        beaker = ctx.obj.beakers[beaker_name]
+        if typer.prompt(f"Clear {beaker_name} ({len(beaker)})? [y/N]") == "y":
+            beaker.reset()
+            typer.secho(f"Cleared {beaker_name}", fg=typer.colors.GREEN)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()
