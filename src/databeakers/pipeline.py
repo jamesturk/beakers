@@ -66,12 +66,10 @@ class Pipeline:
         whole_record: bool = False,
     ) -> None:
         if name is None:
-            if hasattr(func, "__class__"):
-                name = repr(func)
-            elif func.__name__ == "<lambda>":
-                name = "λ"
+            if hasattr(func, "__name__"):
+                name = "λ" if func.__name__ == "<lambda>" else func.__name__
             else:
-                name = func.__name__
+                name = repr(func)
         edge = Edge(
             name=name,
             edge_type=edge_type,
@@ -278,14 +276,16 @@ class Pipeline:
                 already_processed=len(already_processed),
             )
             partial_result = loop.run_until_complete(
-                self._run_edge_async(from_beaker, to_beaker, edge, already_processed)
+                self._run_edge_waterfall(
+                    from_beaker, to_beaker, edge, already_processed
+                )
             )
             for k, v in partial_result.items():
                 node_report[k] += v
 
         return node_report
 
-    async def _run_edge_async(
+    async def _run_edge_waterfall(
         self,
         from_beaker: Beaker,
         to_beaker: Beaker,
@@ -315,7 +315,9 @@ class Pipeline:
 
                 try:
                     with self.db:
-                        result_loc = await self._process_item(edge, to_beaker, id, item)
+                        result_loc = await self._run_edge_func(
+                            from_beaker.name, edge, to_beaker, id, item=item
+                        )
                     node_report[result_loc] += 1
                 except Exception:
                     # uncaught exception, log and re-raise
@@ -349,22 +351,64 @@ class Pipeline:
             raise to_raise
         return node_report
 
-    async def _process_item(self, edge, to_beaker, id, item) -> str:
-        """
-        Process a single item, returning the name of the beaker it was dispatched to.
+    def _run_river(self, start_b, end_b, report: RunReport) -> RunReport:
+        loop = asyncio.new_event_loop()
+        if not start_b:
+            start_b = list(networkx.topological_sort(self.graph))[0]
+        start_beaker = self.beakers[start_b]
+        report.nodes = defaultdict(lambda: defaultdict(int))
 
-        Returns: name of destination beaker (for reporting)
+        for id in start_beaker.id_set():
+            record = self._get_full_record(id)
+            log.info("river record", id=id, record=record)
+            for from_b, to_b in loop.run_until_complete(
+                self._run_one_item_river(record, start_b, end_b)
+            ):
+                report.nodes[from_b][to_b] += 1
+
+        return report
+
+    async def _run_edge_func(
+        self,
+        cur_b: str,
+        edge: Edge,
+        to_beaker: Beaker,
+        id: str,
+        *,
+        item: BaseModel | None = None,
+        record: Record | None = None,
+    ):
+        """
+        Used in river and waterfall runs, logic around an edge function
+        hardly varies between them.
+
+        One key difference is that in waterfall runs, record
+        is always None, so will be fetched using _get_full_record.
+
+        Returns: result_beaker_name
         """
         try:
             if edge.whole_record:
-                record = self._get_full_record(id)
+                if record is None:
+                    record = self._get_full_record(id)
                 result = edge.func(record)
             else:
+                if item is None and record:
+                    item = record[cur_b]
                 result = edge.func(item)
             if inspect.isawaitable(result):
                 result = await result
+            if record:
+                record[to_beaker.name] = result
         except Exception as e:
-            log.info("exception", exception=repr(e), id=id, item=item)
+            log.info(
+                "exception",
+                exception=repr(e),
+                edge=edge,
+                id=id,
+                item=item,
+                record=record,
+            )
             for (
                 error_types,
                 error_beaker_name,
@@ -384,42 +428,27 @@ class Pipeline:
                 # no error handler, re-raise
                 raise
 
+        # propagate result to downstream beakers
         match edge.edge_type:
             case EdgeType.transform:
                 # transform: add result to to_beaker (if not None)
                 if result is not None:
                     to_beaker.add_item(result, id)
-                    return to_beaker.name
+                    to_beaker_name = to_beaker.name
                 else:
-                    return "_none"
+                    to_beaker_name = "_none"
             case EdgeType.conditional:
                 # conditional: add item to to_beaker if e_func returns truthy
                 if result:
                     to_beaker.add_item(item, id)
-                    return to_beaker.name
+                    to_beaker_name = to_beaker.name
                 else:
-                    return "_none"
+                    to_beaker_name = "_none"
             case _:
                 raise ValueError(f"Unknown edge type {edge.edge_type}")
+        return to_beaker_name
 
-    def _run_river(self, start_b, end_b, report: RunReport) -> RunReport:
-        loop = asyncio.new_event_loop()
-        if not start_b:
-            start_b = list(networkx.topological_sort(self.graph))[0]
-        start_beaker = self.beakers[start_b]
-        report.nodes = defaultdict(lambda: defaultdict(int))
-
-        for id in start_beaker.id_set():
-            record = self._get_full_record(id)
-            log.info("river record", id=id, record=record)
-            for from_b, to_b in loop.run_until_complete(
-                self._run_one_item(record, start_b, end_b)
-            ):
-                report.nodes[from_b][to_b] += 1
-
-        return report
-
-    async def _run_one_item(
+    async def _run_one_item_river(
         self, record: Record, cur_b: str, end_b: str
     ) -> list[tuple[str, str]]:
         """
@@ -447,50 +476,11 @@ class Pipeline:
             if to_b == end_b:
                 stop_early = True
 
-            try:
-                if edge.whole_record:
-                    result = edge.func(record)
-                else:
-                    result = edge.func(record[cur_b])
-                if inspect.isawaitable(result):
-                    result = await result
-            except Exception as e:
-                log.info("exception", exception=repr(e), record=record)
-                for (
-                    error_types,
-                    error_beaker_name,
-                ) in edge.error_map.items():
-                    if isinstance(e, error_types):
-                        error_beaker = self.beakers[error_beaker_name]
-                        error_beaker.add_item(
-                            ErrorType(
-                                item=record[cur_b],
-                                exception=str(e),
-                                exc_type=str(type(e)),
-                            ),
-                            record.id,
-                        )
-                        from_to.append((cur_b, error_beaker_name))
-                        subtasks.append(
-                            self._run_one_item(record, error_beaker_name, end_b)
-                        )
-                        break
-                else:
-                    # no error handler, re-raise
-                    raise
-            match edge.edge_type:
-                case EdgeType.transform:
-                    if result is not None:
-                        to_beaker.add_item(result, record.id)
-                        from_to.append((cur_b, to_b))
-                        # update record to include the result
-                        record[to_b] = result
-                        subtasks.append(self._run_one_item(record, to_b, end_b))
-                case EdgeType.conditional:
-                    if result:
-                        to_beaker.add_item(record[cur_b], record.id)
-                        from_to.append((cur_b, to_b))
-                        subtasks.append(self._run_one_item(record, to_b, end_b))
+            result_beaker = await self._run_edge_func(
+                cur_b, edge, to_beaker, record.id, record=record
+            )
+            from_to.append((cur_b, result_beaker))
+            subtasks.append(self._run_one_item_river(record, result_beaker, end_b))
 
         log.info(
             "river subtasks", cur_b=cur_b, subtasks=len(subtasks), stop_early=stop_early
