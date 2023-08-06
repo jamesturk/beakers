@@ -311,6 +311,22 @@ def test_run_errormap(mode):
 
 
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
+def test_run_errormap_twice(mode):
+    # this test ensures that things that error out aren't processed twice
+    fruits.reset()
+    fruits.run_seed("errors")  # [100, "pear", "ERROR"]
+
+    # processed once
+    fruits.run(mode)
+    assert len(fruits.beakers["nonword"]) == 1
+    assert len(fruits.beakers["errors"]) == 1
+    assert len(fruits.beakers["fruit"]) == 1
+
+    report = fruits.run(mode)
+    assert report.nodes["word"]["_already_processed"] == 3
+
+
+@pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
 def test_run_error_out(mode):
     fruits.reset()
 
@@ -327,7 +343,7 @@ def test_run_async_functions_in_pipeline(mode):
     async def sentence_maker(word: Word) -> Sentence:
         return Sentence(sentence=f"{word.word} was processed asynchronously.")
 
-    def words_seed() -> Generator[Word]:
+    def words_seed() -> Generator[Word, None, None]:
         for n in range(10):
             yield from [
                 Word(word=f"up {n}"),

@@ -255,6 +255,12 @@ class Pipeline:
                 pass
         return rec
 
+    def _all_upstream(self, to_beaker: Beaker, edge: Edge):
+        all_upstream = to_beaker.id_set()
+        for error_b in edge.error_map.values():
+            all_upstream |= self.beakers[error_b].id_set()
+        return all_upstream
+
     def _run_node_waterfall(self, node: str) -> dict[str, int]:
         """
         Run a single node in a waterfall run, returning a report of items dispatched.
@@ -269,10 +275,8 @@ class Pipeline:
             from_beaker = self.beakers[from_b]
             to_beaker = self.beakers[to_b]
             edge = e["edge"]
-            all_upstream = to_beaker.id_set()
-            for error_b in edge.error_map.values():
-                all_upstream |= self.beakers[error_b].id_set()
-            already_processed = from_beaker.id_set() & to_beaker.id_set()
+            all_upstream = self._all_upstream(to_beaker, edge)
+            already_processed = from_beaker.id_set() & all_upstream
             node_report["_already_processed"] += len(already_processed)
 
             log.info(
@@ -475,8 +479,8 @@ class Pipeline:
             edge = e["edge"]
             to_beaker = self.beakers[to_b]
 
-            # TODO: better way to do this
-            if record.id in to_beaker.id_set():
+            # TODO: cache this upstream set?
+            if record.id in self._all_upstream(to_beaker, edge):
                 from_to.append((cur_b, "_already_processed"))
                 # already processed this item, nothing to do
                 continue
