@@ -6,6 +6,7 @@ import sys
 from types import SimpleNamespace
 from rich import print
 from rich.table import Table
+from rich.text import Text
 from pprint import pprint
 from typing import List, Optional
 from typing_extensions import Annotated
@@ -51,21 +52,36 @@ def reset(ctx: typer.Context) -> None:
 def show(ctx: typer.Context) -> None:
     pipeline = ctx.obj
     graph_data = pipeline.graph_data()
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Node")
+    table.add_column("Items", justify="right")
+    table.add_column("Edges")
     for node in graph_data:
-        typer.secho(
-            f"{node['name']}{'*' if node['temp'] else ''} ({node['len']})",
-            fg=typer.colors.GREEN if node["len"] else typer.colors.YELLOW,
-        )
+        node_style = "green italic"
+        if not node["temp"]:
+            node_style = "green" if node["len"] else "green dim"
+        edge_string = Text()
         for edge in node["edges"]:
-            typer.secho(f"  -({edge['edge'].name})-> {edge['to_beaker']}")
-            for k, v in edge["edge"].error_map.items():
-                if isinstance(k, tuple):
-                    typer.secho(
-                        f"    {' '.join(c.__name__ for c in k)} -> {v}",
-                        fg=typer.colors.RED,
+            edge_string.append(
+                f"{edge['edge'].name} -> ",
+                style="cyan",
+            )
+            edge_string.append(
+                f"{edge['to_beaker']}",
+                style="green",
+            )
+            if edge["edge"].error_map:
+                for exceptions, to_beaker in edge["edge"].error_map.items():
+                    edge_string.append(
+                        f"\n   {' '.join(e.__name__ for e in exceptions)} -> {to_beaker}",
+                        style="yellow",
                     )
-                else:
-                    typer.secho(f"    {k.__name__} -> {v}", fg=typer.colors.RED)
+        table.add_row(
+            Text(f"{node['name']}", style=node_style),
+            "-" if node["temp"] else str(node["len"]),
+            edge_string,
+        )
+    print(table)
 
 
 @app.command()

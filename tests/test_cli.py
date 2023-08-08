@@ -65,17 +65,18 @@ def test_show():
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "show"])
     assert (
         result.output
-        == """errors (0)
-nonword (0)
-word (0)
-  -(λ)-> normalized
-    AttributeError -> nonword
-normalized* (0)
-  -(is_fruit)-> fruit
-    ValueError -> errors
-fruit (0)
-  -(λ)-> sentence
-sentence (0)
+        == """┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Node       ┃ Items ┃ Edges                        ┃
+┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ errors     │     0 │                              │
+│ nonword    │     0 │                              │
+│ word       │     0 │ λ -> normalized              │
+│            │       │    AttributeError -> nonword │
+│ normalized │     - │ is_fruit -> fruit            │
+│            │       │    ValueError -> errors      │
+│ fruit      │     0 │ λ -> sentence                │
+│ sentence   │     0 │                              │
+└────────────┴───────┴──────────────────────────────┘
 """
     )
 
