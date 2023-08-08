@@ -91,9 +91,9 @@ def show(
 
     if watch:
         with Live(_make_table(), refresh_per_second=1) as live:
-            live.update(_make_table())
             while True:
                 time.sleep(1)
+                live.update(_make_table())
     else:
         print(_make_table())
 
