@@ -4,6 +4,8 @@ import datetime
 import typer
 import sys
 from types import SimpleNamespace
+from rich import print
+from rich.table import Table
 from pprint import pprint
 from typing import List, Optional
 from typing_extensions import Annotated
@@ -109,7 +111,33 @@ def run(
     if not input and not has_data:
         typer.secho("No data! Run seed(s) first.", fg=typer.colors.RED)
         raise typer.Exit(1)
-    ctx.obj.run(mode, start, end)
+    report = ctx.obj.run(mode, start, end)
+
+    table = Table(title="Run Report", show_header=False, show_lines=False)
+
+    table.add_column("", style="cyan")
+    table.add_column("")
+
+    table.add_row("Start Time", report.start_time.strftime("%H:%M:%S %b %d"))
+    table.add_row("End Time", report.end_time.strftime("%H:%M:%S %b %d"))
+    duration = report.end_time - report.start_time
+    table.add_row("Duration", str(duration))
+    table.add_row("Start Beaker", report.start_beaker or "-")
+    table.add_row("End Beaker", report.end_beaker or "-")
+    table.add_row("Run Mode", report.run_mode.value)
+
+    from_to_table = Table()
+    from_to_table.add_column("From Beaker", style="cyan")
+    from_to_table.add_column("Destinations")
+    for from_beaker, to_beakers in report.nodes.items():
+        destinations = "\n".join(
+            f"{to_beaker} ({num_items})" for to_beaker, num_items in to_beakers.items()
+        )
+        if destinations:
+            from_to_table.add_row(from_beaker, destinations)
+
+    print(table)
+    print(from_to_table)
 
 
 @app.command()

@@ -98,3 +98,8 @@ def test_run_simple():
     assert len(fruits.beakers["fruit"]) == 2
     # can't see normalized because it's a TempBeaker & will be empty
     assert len(fruits.beakers["normalized"]) == 0
+
+    assert "Run Report" in result.output
+    assert "word" in result.output
+    assert "fruit (2)" in result.output
+    assert "sentence (2)" in result.output
