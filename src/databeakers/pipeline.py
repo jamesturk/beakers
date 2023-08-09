@@ -10,6 +10,7 @@ from structlog import get_logger
 
 from ._record import Record
 from ._models import Edge, EdgeType, RunMode, RunReport, Seed
+from ._utils import callable_name
 from .beakers import Beaker, SqliteBeaker, TempBeaker
 from .exceptions import ItemNotFound, SeedError
 
@@ -78,10 +79,7 @@ class Pipeline:
         whole_record: bool = False,
     ) -> None:
         if name is None:
-            if hasattr(func, "__name__"):
-                name = "λ" if func.__name__ == "<lambda>" else func.__name__
-            else:
-                name = repr(func)
+            name = callable_name(func)
         edge = Edge(
             name=name,
             edge_type=edge_type,

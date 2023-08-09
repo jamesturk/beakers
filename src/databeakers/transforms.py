@@ -2,6 +2,7 @@ import time
 import asyncio
 from pydantic import BaseModel
 from structlog import get_logger
+from ._utils import callable_name
 
 log = get_logger()
 
@@ -17,7 +18,7 @@ class RateLimit:
         self.last_call = None
 
     def __repr__(self):
-        return f"RateLimit({self.edge_func}, {self.requests_per_second})"
+        return f"RateLimit({callable_name(self.edge_func)}, {self.requests_per_second})"
 
     async def __call__(self, item: BaseModel) -> BaseModel:
         if self.last_call is None:
@@ -44,7 +45,7 @@ class Retry:
         self.retries = retries
 
     def __repr__(self):
-        return f"Retry({self.edge_func}, {self.retries})"
+        return f"Retry({callable_name(self.edge_func)}, {self.retries})"
 
     async def __call__(self, item: BaseModel) -> BaseModel:
         exception = None

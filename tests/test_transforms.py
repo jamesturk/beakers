@@ -37,6 +37,11 @@ async def test_rate_limit_async_edge_func():
     await assert_time_diff_between(lambda: rate_limit("x"), 0.1, 0.2)
 
 
+def test_rate_limit_repr():
+    rate_limit = RateLimit(lambda x: x, requests_per_second=10)
+    assert repr(rate_limit) == "RateLimit(λ, 10)"
+
+
 @pytest.mark.asyncio
 async def test_retry_and_succeed():
     calls = 0
@@ -69,3 +74,11 @@ async def test_retry_and_still_fail():
     with pytest.raises(ValueError):
         await retry("x")
     assert calls == 2
+
+
+def test_retry_repr():
+    def edge_func(item):
+        return item
+
+    retry = Retry(edge_func, retries=1)
+    assert repr(retry) == "Retry(edge_func, 1)"
