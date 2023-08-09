@@ -28,7 +28,10 @@ class RateLimit:
                 log.debug("sleep", seconds=diff)
                 await asyncio.sleep(diff)
         self.last_call = time.time()
-        return await self.edge_func(item)
+        result = self.edge_func(item)
+        if asyncio.iscoroutine(result):
+            return await result
+        return result
 
 
 class Retry:
@@ -51,5 +54,7 @@ class Retry:
             except Exception as e:
                 exception = e
                 log.error("retry", exception=e, retry=n + 1)
+        # if we get here, we've exhausted our retries
+        # (conditional appeases mypy)
         if exception:
             raise exception
