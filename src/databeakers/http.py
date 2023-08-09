@@ -19,7 +19,9 @@ class HttpRequest:
     Filter that converts from a beaker with a URL to a beaker with an HTTP response.
     """
 
-    def __init__(self, field: str = "url", *, follow_redirects: bool = True) -> None:
+    def __init__(
+        self, field: str = "url", *, follow_redirects: bool = True, retries: int = 0
+    ) -> None:
         """
         Args:
             field: The name of the field in the beaker that contains the URL.
@@ -27,11 +29,11 @@ class HttpRequest:
         """
         self.field = field
         self.follow_redirects = follow_redirects
-        transport = httpx.AsyncHTTPTransport(retries=1)
+        transport = httpx.AsyncHTTPTransport(retries=retries)
         self.client = httpx.AsyncClient(transport=transport)
 
     def __repr__(self):
-        return "HttpRequest()"
+        return f"HttpRequest({self.field})"
 
     async def __call__(self, item: BaseModel) -> HttpResponse:
         url = getattr(item, self.field)
