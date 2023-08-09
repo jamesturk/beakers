@@ -1,3 +1,7 @@
+class BeakerNotFound(Exception):
+    """Raised when a beaker is not found."""
+
+
 class SeedError(Exception):
     """Raised when a seed fails to run."""
 

@@ -12,7 +12,7 @@ from ._record import Record
 from ._models import Edge, EdgeType, RunMode, RunReport, Seed
 from ._utils import callable_name
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .exceptions import ItemNotFound, SeedError
+from .exceptions import BeakerNotFound, ItemNotFound, SeedError
 
 # !!! Note:
 # by convention, a variable ending with _b is a beaker name
@@ -87,6 +87,14 @@ class Pipeline:
             error_map=error_map or {},
             whole_record=whole_record,
         )
+        if from_beaker not in self.beakers:
+            raise BeakerNotFound(f"{to_beaker} not found")
+        if to_beaker not in self.beakers:
+            raise BeakerNotFound(f"{to_beaker} not found")
+        for err_b in edge.error_map.values():
+            if err_b not in self.beakers:
+                log.warning("implicit error beaker", beaker=err_b)
+                self.add_beaker(err_b, ErrorType)
         self.graph.add_edge(
             from_beaker,
             to_beaker,

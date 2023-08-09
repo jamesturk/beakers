@@ -1,7 +1,7 @@
 from typing import Generator
 import pytest
-from databeakers import Pipeline
-from databeakers.exceptions import SeedError
+from databeakers.pipeline import Pipeline, ErrorType
+from databeakers.exceptions import SeedError, BeakerNotFound
 from databeakers._models import Edge, Seed, RunMode
 from examples import Word, Sentence, fruits
 
@@ -84,6 +84,7 @@ def test_add_beaker_simple() -> None:
 def test_add_transform():
     pipeline = Pipeline("test")
     pipeline.add_beaker("word", Word)
+    pipeline.add_beaker("capitalized", Word)
     pipeline.add_transform("word", "capitalized", capitalized)
     assert pipeline.graph["word"]["capitalized"]["edge"] == Edge(
         name="capitalized",
@@ -97,6 +98,7 @@ def test_add_transform():
 def test_add_transform_lambda():
     pipeline = Pipeline("test")
     pipeline.add_beaker("word", Word)
+    pipeline.add_beaker("capitalized", Word)
     pipeline.add_transform("word", "capitalized", lambda x: x)
     assert pipeline.graph["word"]["capitalized"]["edge"].name == "λ"
 
@@ -104,12 +106,39 @@ def test_add_transform_lambda():
 def test_add_transform_error_map():
     pipeline = Pipeline("test")
     pipeline.add_beaker("word", Word)
+    pipeline.add_beaker("capitalized", Word)
     pipeline.add_transform(
         "word", "capitalized", capitalized, error_map={(ValueError,): "error"}
     )
     assert pipeline.graph["word"]["capitalized"]["edge"].error_map == {
         (ValueError,): "error"
     }
+
+
+def test_add_transform_bad_from_beaker():
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("capitalized", Word)
+    with pytest.raises(BeakerNotFound):
+        pipeline.add_transform("word", "capitalized", capitalized)
+
+
+def test_add_transform_bad_to_beaker():
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("word", Word)
+    with pytest.raises(BeakerNotFound):
+        pipeline.add_transform("word", "capitalized", capitalized)
+
+
+def test_add_transform_implicit_error_beaker():
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("word", Word)
+    pipeline.add_beaker("capitalized", Word)
+    pipeline.add_transform(
+        "word", "capitalized", capitalized, error_map={(Exception,): "error"}
+    )
+    # error beaker is created implicitly if it didn't exist
+    assert pipeline.beakers["error"].model == ErrorType
+    # TODO: assert that warning was logged
 
 
 def test_graph_data_simple():
