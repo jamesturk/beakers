@@ -17,7 +17,7 @@ def test_no_pipeline():
     result = runner.invoke(app, ["seeds"])
     assert (
         result.output
-        == "Missing pipeline; pass --pipeline or set env[BEAKER_PIPELINE]\n"
+        == "Missing pipeline; pass --pipeline or set env[databeakers_pipeline_path]\n"
     )
     assert result.exit_code == 1
 

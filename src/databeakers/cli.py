@@ -14,6 +14,8 @@ from typing_extensions import Annotated
 
 from ._models import RunMode
 from .exceptions import SeedError
+from .config import load_config
+from .pipeline import Pipeline
 
 app = typer.Typer()
 
@@ -28,15 +30,19 @@ def _load_pipeline(dotted_path: str) -> SimpleNamespace:
 @app.callback()
 def main(
     ctx: typer.Context,
-    pipeline: str = typer.Option(None, envvar="BEAKER_PIPELINE"),
+    pipeline: str = typer.Option(""),
 ) -> None:
-    if not pipeline:
+    config = load_config(pipeline_path=pipeline)
+    if not config.pipeline_path:
         typer.secho(
-            "Missing pipeline; pass --pipeline or set env[BEAKER_PIPELINE]",
+            "Missing pipeline; pass --pipeline or set env[databeakers_pipeline_path]",
             fg=typer.colors.RED,
         )
         raise typer.Exit(1)
-    ctx.obj = _load_pipeline(pipeline)
+    ctx.obj = _load_pipeline(config.pipeline_path)
+    if not isinstance(ctx.obj, Pipeline):
+        typer.secho(f"Invalid pipeline: {config.pipeline_path}")
+        raise typer.Exit(1)
 
 
 @app.command()
