@@ -1,6 +1,7 @@
 import pytest
 from pydantic import BaseModel
-from databeakers.http import HttpRequest, HttpResponse
+from databeakers.pipeline import Pipeline
+from databeakers.http import HttpRequest, HttpResponse, make_http_edge
 
 
 class URL(BaseModel):
@@ -30,3 +31,14 @@ async def test_http_request_alt_field_name():
     assert "example" in response.response_body
     assert response.url == "http://example.com"
     assert repr(http_request) == "HttpRequest(alt_field_name)"
+
+
+def test_make_http_edge():
+    # very simple test, could be improved
+    pipeline = Pipeline("http", ":memory:")
+    pipeline.add_beaker("start", URL)
+    pipeline.add_beaker("response", HttpResponse)
+    pipeline.add_edge("start", "response", make_http_edge("http"))
+    # ensure that default error beakers were added
+    assert "http_timeout" in pipeline.beakers
+    assert "http_error" in pipeline.beakers

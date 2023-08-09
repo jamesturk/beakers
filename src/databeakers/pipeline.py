@@ -87,6 +87,9 @@ class Pipeline:
             error_map=error_map or {},
             whole_record=whole_record,
         )
+        self.add_edge(from_beaker, to_beaker, edge)
+
+    def add_edge(self, from_beaker: str, to_beaker: str, edge: Edge) -> None:
         # ensure beakers exist
         if from_beaker not in self.beakers:
             raise BeakerNotFound(f"{to_beaker} not found")
@@ -96,32 +99,42 @@ class Pipeline:
         to_model = self.beakers[to_beaker].model
 
         # check if the edge function is valid
-        signature = inspect.signature(func)
+        signature = inspect.signature(edge.func)
         param_annotations = [p.annotation for p in signature.parameters.values()]
         if len(param_annotations) != 1:
             raise InvalidGraph("Edge functions should only take (item) as parameters")
         item_annotation = param_annotations[0]
         if item_annotation == inspect.Signature.empty:
             log.warning(
-                "no parameter annotation on edge function", func=func, name=name
+                "no parameter annotation on edge function",
+                func=edge.func,
+                name=edge.name,
             )
-        elif item_annotation != from_model:
+        elif not issubclass(
+            from_model, item_annotation
+        ):  # accept subclasses as parameters
             raise InvalidGraph(
-                f"{name} expects {item_annotation.__name__}, "
+                f"{edge.name} expects {item_annotation.__name__}, "
                 f"{from_beaker} contains {from_model.__name__}"
             )
         if signature.return_annotation == inspect.Signature.empty:
-            log.warning("no return annotation on edge function", func=func, name=name)
+            log.warning(
+                "no return annotation on edge function", func=edge.func, name=edge.name
+            )
         elif (
-            edge_type == EdgeType.transform and signature.return_annotation != to_model
+            edge.edge_type == EdgeType.transform
+            and signature.return_annotation != to_model
         ):
             raise InvalidGraph(
-                f"{name} returns {signature.return_annotation.__name__}, "
+                f"{edge.name} returns {signature.return_annotation.__name__}, "
                 f"{to_beaker} expects {to_model.__name__}"
             )
-        elif edge_type == EdgeType.conditional and signature.return_annotation != bool:
+        elif (
+            edge.edge_type == EdgeType.conditional
+            and signature.return_annotation != bool
+        ):
             raise InvalidGraph(
-                f"{name} returns {signature.return_annotation.__name__}, "
+                f"{edge.name} returns {signature.return_annotation.__name__}, "
                 "conditional edges must return bool"
             )
 
