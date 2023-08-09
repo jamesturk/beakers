@@ -24,6 +24,9 @@ class SteadyRateLimit:
         self.callable = f_callable
         self.sleep_seconds = sleep_seconds
 
+    def __repr__(self):
+        return f"SteadyRateLimit({self.callable}, {self.sleep_seconds})"
+
     async def __call__(self, item: BaseModel) -> BaseModel:
         await asyncio.sleep(self.sleep_seconds)
         return await self.callable(item)
@@ -44,6 +47,9 @@ class HttpRequest:
         self.follow_redirects = follow_redirects
         transport = httpx.AsyncHTTPTransport(retries=1)
         self.client = httpx.AsyncClient(transport=transport)
+
+    def __repr__(self):
+        return "HttpRequest()"
 
     async def __call__(self, item: BaseModel) -> HttpResponse:
         url = getattr(item, self.field)
