@@ -1,7 +1,7 @@
 from typing import Generator
 import pytest
 from databeakers.pipeline import Pipeline, ErrorType
-from databeakers.exceptions import SeedError, BeakerNotFound, InvalidGraph
+from databeakers.exceptions import SeedError, InvalidGraph
 from databeakers._models import Edge, Seed, RunMode, EdgeType
 from examples import Word, Sentence, fruits
 
@@ -118,14 +118,7 @@ def test_add_transform_error_map(wc_pipeline):
 def test_add_transform_bad_from_beaker():
     pipeline = Pipeline("test")
     pipeline.add_beaker("capitalized", Word)
-    with pytest.raises(BeakerNotFound):
-        pipeline.add_transform("word", "capitalized", capitalized)
-
-
-def test_add_transform_bad_to_beaker():
-    pipeline = Pipeline("test")
-    pipeline.add_beaker("word", Word)
-    with pytest.raises(BeakerNotFound):
+    with pytest.raises(InvalidGraph):
         pipeline.add_transform("word", "capitalized", capitalized)
 
 
@@ -138,7 +131,7 @@ def test_add_transform_implicit_error_beaker(wc_pipeline):
     # TODO: assert that warning was logged
 
 
-def test_add_transform_bad_annotation(wc_pipeline):
+def test_add_transform_bad_annotation_parameter(wc_pipeline):
     def bad_annotation(_: int) -> Word:
         return Word(word="apple")
 
@@ -151,6 +144,22 @@ def test_add_transform_bad_annotation(wc_pipeline):
     with pytest.raises(InvalidGraph) as e:
         wc_pipeline.add_transform("word", "capitalized", bad_annotation_ret)
     assert "returns int, capitalized expects Word" in str(e)
+
+
+def test_add_transform_implicit_return_beaker():
+    """test that if return beaker is not specified and does not exist, it is created implicitly"""
+    p = Pipeline("test", ":memory:")
+    p.add_beaker("word", Word)
+    p.add_transform("word", "capitalized", capitalized)
+    assert p.beakers["capitalized"].model == Word
+
+
+def test_add_transform_no_implicit_return_beaker():
+    """if there is no annotation on the return type, we can't create a beaker"""
+    pipeline = Pipeline("test")
+    pipeline.add_beaker("word", Word)
+    with pytest.raises(InvalidGraph):
+        pipeline.add_transform("word", "capitalized", lambda x: x.upper())
 
 
 def test_add_transform_bad_annotation_conditional(wc_pipeline):
