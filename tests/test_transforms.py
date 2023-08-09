@@ -1,6 +1,7 @@
 import time
 import pytest
 from databeakers.transforms import RateLimit, Retry
+from databeakers.http import HttpRequest
 
 
 async def assert_time_diff_between(func, min_diff, max_diff):
@@ -82,3 +83,9 @@ def test_retry_repr():
 
     retry = Retry(edge_func, retries=1)
     assert repr(retry) == "Retry(edge_func, 1)"
+
+
+def test_stacked_repr():
+    assert repr(Retry(RateLimit(HttpRequest()), retries=1)) == (
+        "Retry(RateLimit(HttpRequest(url), 1), 1)"
+    )

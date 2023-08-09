@@ -221,7 +221,7 @@ class Pipeline:
         elif run_mode == RunMode.river:
             return self._run_river(start_beaker, end_beaker, report)
         else:
-            raise ValueError(f"Unknown run mode {run_mode}")
+            raise ValueError(f"Unknown run mode {run_mode}")  # pragma: no cover
 
     def _run_waterfall(
         self, start_beaker: str | None, end_beaker: str | None, report: RunReport
@@ -327,7 +327,7 @@ class Pipeline:
                     id, item = await queue.get()
                 except RuntimeError:
                     # queue closed
-                    return
+                    return  # pragma: no cover
                 log.info("task accepted", worker=name, id=id, item=item, edge=edge.name)
 
                 try:
@@ -461,7 +461,7 @@ class Pipeline:
                     to_beaker_name = to_beaker.name
                 else:
                     to_beaker_name = "_none"
-            case _:
+            case _:  # pragma: no cover
                 raise ValueError(f"Unknown edge type {edge.edge_type}")
         return to_beaker_name
 
