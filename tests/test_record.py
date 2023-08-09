@@ -1,4 +1,4 @@
-from databeakers.record import Record
+from databeakers._record import Record
 import pytest
 
 

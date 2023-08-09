@@ -1,3 +1,6 @@
+"""
+Internal pydantic models.
+"""
 import datetime
 from enum import Enum
 from typing import Callable
@@ -59,9 +62,3 @@ class RunReport(BaseModel):
     end_beaker: str | None
     run_mode: RunMode
     nodes: dict[str, dict[str, int]] = {}
-
-
-class ErrorType(BaseModel):
-    item: BaseModel
-    exception: str
-    exc_type: str

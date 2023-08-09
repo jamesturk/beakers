@@ -5,12 +5,12 @@ import datetime
 import networkx  # type: ignore
 from collections import defaultdict
 from typing import Iterable, Callable, Type
-from databeakers.models import Edge, EdgeType, ErrorType, RunMode, RunReport, Seed
 from pydantic import BaseModel
 from structlog import get_logger
 
+from ._record import Record
+from ._models import Edge, EdgeType, RunMode, RunReport, Seed
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .record import Record
 from .exceptions import ItemNotFound, SeedError
 
 # !!! Note:
@@ -19,6 +19,13 @@ from .exceptions import ItemNotFound, SeedError
 # _beaker_name is sometimes used to be explicit, and is also a name
 
 log = get_logger()
+
+
+# not in models because it is used externally
+class ErrorType(BaseModel):
+    item: BaseModel
+    exception: str
+    exc_type: str
 
 
 class Pipeline:

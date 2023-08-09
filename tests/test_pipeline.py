@@ -2,7 +2,7 @@ from typing import Generator
 import pytest
 from databeakers import Pipeline
 from databeakers.exceptions import SeedError
-from databeakers.models import Edge, Seed, RunMode
+from databeakers._models import Edge, Seed, RunMode
 from examples import Word, Sentence, fruits
 
 

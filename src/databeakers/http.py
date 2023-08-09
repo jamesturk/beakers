@@ -53,8 +53,6 @@ class HttpRequest:
 
     async def __call__(self, item: BaseModel) -> HttpResponse:
         url = getattr(item, self.field)
-
-        # async with self.client as client:
         response = await self.client.get(url, follow_redirects=self.follow_redirects)
 
         return HttpResponse(

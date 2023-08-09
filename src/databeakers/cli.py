@@ -12,7 +12,7 @@ from pprint import pprint
 from typing import List, Optional
 from typing_extensions import Annotated
 
-from .models import RunMode
+from ._models import RunMode
 from .exceptions import SeedError
 
 app = typer.Typer()

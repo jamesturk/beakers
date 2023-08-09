@@ -2,6 +2,11 @@ from pydantic import BaseModel
 
 
 class Record:
+    """
+    Internal class used to represent a record (sum of data)
+    when moving through a pipeline.
+    """
+
     _reserved_names = ("id",)
 
     def __init__(self, id: str):
