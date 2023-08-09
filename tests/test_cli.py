@@ -25,7 +25,7 @@ def test_no_pipeline():
 def test_list_seeds_simple():
     fruits.reset()
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seeds"])
-    assert result.output == "word\n  abc\n  errors\n"
+    assert "word\n  abc\n  errors\n" in result.output
     assert result.exit_code == 0
 
 

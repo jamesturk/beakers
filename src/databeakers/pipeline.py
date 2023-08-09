@@ -12,7 +12,7 @@ from ._record import Record
 from ._models import Edge, EdgeType, RunMode, RunReport, Seed
 from ._utils import callable_name
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .exceptions import BeakerNotFound, ItemNotFound, SeedError
+from .exceptions import BeakerNotFound, ItemNotFound, SeedError, InvalidGraph
 
 # !!! Note:
 # by convention, a variable ending with _b is a beaker name
@@ -87,14 +87,53 @@ class Pipeline:
             error_map=error_map or {},
             whole_record=whole_record,
         )
+        # ensure beakers exist
         if from_beaker not in self.beakers:
             raise BeakerNotFound(f"{to_beaker} not found")
         if to_beaker not in self.beakers:
             raise BeakerNotFound(f"{to_beaker} not found")
+        from_model = self.beakers[from_beaker].model
+        to_model = self.beakers[to_beaker].model
+
+        # check if the edge function is valid
+        signature = inspect.signature(func)
+        param_annotations = [p.annotation for p in signature.parameters.values()]
+        if len(param_annotations) != 1:
+            raise InvalidGraph("Edge functions should only take (item) as parameters")
+        item_annotation = param_annotations[0]
+        if item_annotation == inspect.Signature.empty:
+            log.warning(
+                "no parameter annotation on edge function", func=func, name=name
+            )
+        elif item_annotation != from_model:
+            raise InvalidGraph(
+                f"{name} expects {item_annotation.__name__}, "
+                f"{from_beaker} contains {from_model.__name__}"
+            )
+        if signature.return_annotation == inspect.Signature.empty:
+            log.warning("no return annotation on edge function", func=func, name=name)
+        elif (
+            edge_type == EdgeType.transform and signature.return_annotation != to_model
+        ):
+            raise InvalidGraph(
+                f"{name} returns {signature.return_annotation.__name__}, "
+                f"{to_beaker} expects {to_model.__name__}"
+            )
+        elif edge_type == EdgeType.conditional and signature.return_annotation != bool:
+            raise InvalidGraph(
+                f"{name} returns {signature.return_annotation.__name__}, "
+                "conditional edges must return bool"
+            )
+
         for err_b in edge.error_map.values():
             if err_b not in self.beakers:
                 log.warning("implicit error beaker", beaker=err_b)
                 self.add_beaker(err_b, ErrorType)
+            else:
+                if self.beakers[err_b].model != ErrorType:
+                    raise InvalidGraph(
+                        f"Error beaker '{err_b}' must use beakers.pipeline.ErrorType"
+                    )
         self.graph.add_edge(
             from_beaker,
             to_beaker,

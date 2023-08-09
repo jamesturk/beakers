@@ -2,6 +2,10 @@ class BeakerNotFound(Exception):
     """Raised when a beaker is not found."""
 
 
+class InvalidGraph(Exception):
+    """Raised when a graph is invalid."""
+
+
 class SeedError(Exception):
     """Raised when a seed fails to run."""
 

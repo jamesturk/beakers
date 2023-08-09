@@ -49,8 +49,6 @@ fruits = Pipeline("fruits", "fruits_test.db")
 fruits.add_beaker("word", Word)
 fruits.add_beaker("normalized", Word, beaker_type=TempBeaker)
 fruits.add_beaker("fruit", IdOnly)
-fruits.add_beaker("nonword", IdOnly)
-fruits.add_beaker("errors", IdOnly)
 fruits.add_beaker("sentence", Sentence)
 fruits.add_transform(
     "word",
