@@ -8,7 +8,7 @@ class Config(BaseSettings):
         description="Path to the pipeline instance.",
     )
     log_level: str = pydantic.Field(
-        "info",
+        "warning",
         description="Logging level.",
     )
     log_file: str = pydantic.Field(
@@ -33,15 +33,23 @@ def load_config(**overrides):
         structlog.dev.set_exc_info,
         structlog.processors.TimeStamper(),
     ]
+
+    # either JSON renderer or console renderer
     if config.log_format == "json":
         processors.append(structlog.processors.JSONRenderer())
-    else:
-        processors.append(structlog.dev.ConsoleRenderer())
 
     if config.log_file == "STDOUT":
+        if config.log_format != "json":
+            processors.append(structlog.dev.ConsoleRenderer())
         factory = structlog.PrintLoggerFactory()
     else:
-        factory = structlog.PrintLoggerFactory(file=open(config.log_file, "a"))
+        if config.log_format != "json":
+            processors.append(
+                structlog.processors.KeyValueRenderer(
+                    key_order=["level", "event", "timestamp"]
+                )
+            )
+        factory = structlog.PrintLoggerFactory(file=open(config.log_file, "w"))
 
     structlog.configure(
         processors=processors,

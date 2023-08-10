@@ -91,7 +91,10 @@ def test_run_no_data():
 def test_run_simple():
     fruits.reset()
     runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
-    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "--log-level", "info", "run"]
+    )
+    # logs
     assert "edge" in result.output
     assert "is_fruit" in result.output
     assert result.exit_code == 0

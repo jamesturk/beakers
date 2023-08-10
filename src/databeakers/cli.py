@@ -31,8 +31,12 @@ def _load_pipeline(dotted_path: str) -> SimpleNamespace:
 def main(
     ctx: typer.Context,
     pipeline: str = typer.Option(""),
+    log_level: str = typer.Option(""),
 ) -> None:
-    config = load_config(pipeline_path=pipeline)
+    overrides = {"pipeline_path": pipeline}
+    if log_level:
+        overrides["log_level"] = log_level
+    config = load_config(**overrides)
     if not config.pipeline_path:
         typer.secho(
             "Missing pipeline; pass --pipeline or set env[databeakers_pipeline_path]",
