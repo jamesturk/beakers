@@ -133,7 +133,7 @@ class Pipeline:
             else:
                 to_model = signature.return_annotation
                 self.add_beaker(to_beaker, to_model)
-                log.warning(
+                log.info(
                     "implicit beaker", beaker=to_beaker, datatype=to_model.__name__
                 )
         else:
@@ -163,7 +163,7 @@ class Pipeline:
         # check error beakers
         for err_b in edge.error_map.values():
             if err_b not in self.beakers:
-                log.warning("implicit error beaker", beaker=err_b)
+                log.info("implicit error beaker", beaker=err_b)
                 self.add_beaker(err_b, ErrorType)
             else:
                 if self.beakers[err_b].model != ErrorType:
