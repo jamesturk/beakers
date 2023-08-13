@@ -105,7 +105,10 @@ class Pipeline:
         signature = inspect.signature(edge.func)
         param_annotations = [p.annotation for p in signature.parameters.values()]
         if len(param_annotations) != 1:
-            raise InvalidGraph("Edge functions should only take (item) as parameters")
+            raise InvalidGraph(
+                f"Edge functions should only take (item) as parameters, {edge.func} "
+                f"takes {len(param_annotations)}"
+            )
         item_annotation = param_annotations[0]
         if item_annotation == inspect.Signature.empty:
             log.warning(
@@ -141,9 +144,8 @@ class Pipeline:
                     func=edge.func,
                     name=edge.name,
                 )
-            elif (
-                edge.edge_type == EdgeType.transform
-                and signature.return_annotation != to_model
+            elif edge.edge_type == EdgeType.transform and not issubclass(
+                to_model, signature.return_annotation
             ):
                 raise InvalidGraph(
                     f"{edge.name} returns {signature.return_annotation.__name__}, "
