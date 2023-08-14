@@ -105,10 +105,20 @@ def show(
 
 
 @app.command()
-def graph(ctx: typer.Context) -> None:
+def graph(
+    ctx: typer.Context, filename: str = typer.Option("graph.svg", "--filename", "-f")
+) -> None:
     dotg = ctx.obj.to_pydot()
-    filename = "graph.svg"
-    dotg.write_svg(filename, prog="dot")
+    if filename.endswith(".svg"):
+        dotg.write_svg(filename, prog="dot")
+    elif filename.endswith(".png"):
+        dotg.write_png(filename, prog="dot")
+    elif filename.endswith(".dot"):
+        # maybe write_raw instead?
+        dotg.write_dot(filename)
+    else:
+        typer.secho(f"Unknown file extension: {filename}", fg=typer.colors.RED)
+        raise typer.Exit(1)
     typer.secho(f"Graph written to {filename}", fg=typer.colors.GREEN)
 
 
