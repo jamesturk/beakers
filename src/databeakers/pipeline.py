@@ -5,7 +5,7 @@ import datetime
 import networkx  # type: ignore
 import pydot
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Generator, AsyncGenerator
 from typing import Iterable, Callable, Type
 from pydantic import BaseModel
 from structlog import get_logger
@@ -544,11 +544,16 @@ class Pipeline:
         match edge.edge_type:
             case EdgeType.transform:
                 # transform: add result to to_beaker (if not None)
-                if isinstance(result, Generator):
+                if isinstance(result, (Generator, AsyncGenerator)):
                     num_yielded = 0
-                    for i in result:
-                        to_beaker.add_item(i, parent=id, id_=None)
-                        num_yielded += 1
+                    if isinstance(result, Generator):
+                        for i in result:
+                            to_beaker.add_item(i, parent=id, id_=None)
+                            num_yielded += 1
+                    else:
+                        async for i in result:
+                            to_beaker.add_item(i, parent=id, id_=None)
+                            num_yielded += 1
                     log.info(
                         "generator yielded", edge=edge, id=id, num_yielded=num_yielded
                     )

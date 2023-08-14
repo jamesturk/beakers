@@ -1,4 +1,4 @@
-from typing import Generator
+from typing import Generator, AsyncGenerator
 import pytest
 import itertools
 from databeakers.pipeline import Pipeline, ErrorType
@@ -476,5 +476,32 @@ def test_run_generator_func(mode):
     report = p.run(mode)
 
     assert report.nodes["word"]["_already_processed"] == 0
-    # assert report.nodes["word"]["anagram"] == 12  # 6 from each word
-    assert len(p.beakers["anagram"]) == 12
+    assert report.nodes["word"]["anagram"] == 2  # two moved from word -> anagram
+    assert len(p.beakers["anagram"]) == 12  # but 12 were created
+
+
+@pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
+def test_run_async_generator_func(mode):
+    async def anagrams(word: Word) -> AsyncGenerator[Word, None, None]:
+        for perm in itertools.permutations(str(word.word)):
+            yield Word(word="".join(perm))
+
+    def words_seed() -> Generator[Word, None, None]:
+        yield from [
+            Word(word="cat"),
+            Word(word="dog"),
+        ]
+
+    p = Pipeline("test", ":memory:")
+    p.add_beaker("word", Word)
+    p.add_beaker("anagram", Word)
+    p.add_transform("word", "anagram", anagrams)
+    p.add_seed("words", "word", words_seed)
+
+    p.run_seed("words")
+    assert len(p.beakers["word"]) == 2
+    report = p.run(mode)
+
+    assert report.nodes["word"]["_already_processed"] == 0
+    assert report.nodes["word"]["anagram"] == 2  # two moved from word -> anagram
+    assert len(p.beakers["anagram"]) == 12  # but 12 were created
