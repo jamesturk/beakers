@@ -1,5 +1,6 @@
 from typing import Generator
 import pytest
+import itertools
 from databeakers.pipeline import Pipeline, ErrorType
 from databeakers.exceptions import SeedError, InvalidGraph
 from databeakers._models import Edge, Seed, RunMode, EdgeType
@@ -450,3 +451,30 @@ def test_run_async_functions_in_pipeline(mode):
     ]
 
     assert len(sentences) == 60
+
+
+@pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
+def test_run_generator_func(mode):
+    def anagrams(word: Word) -> Generator[Word, None, None]:
+        for perm in itertools.permutations(str(word.word)):
+            yield Word(word="".join(perm))
+
+    def words_seed() -> Generator[Word, None, None]:
+        yield from [
+            Word(word="cat"),
+            Word(word="dog"),
+        ]
+
+    p = Pipeline("test", ":memory:")
+    p.add_beaker("word", Word)
+    p.add_beaker("anagram", Word)
+    p.add_transform("word", "anagram", anagrams)
+    p.add_seed("words", "word", words_seed)
+
+    p.run_seed("words")
+    assert len(p.beakers["word"]) == 2
+    report = p.run(mode)
+
+    assert report.nodes["word"]["_already_processed"] == 0
+    assert report.nodes["word"]["anagrams"] == 12  # 6 from each word
+    assert len(p.beakers["anagrams"]) == 12
