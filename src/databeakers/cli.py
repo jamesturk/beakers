@@ -73,11 +73,15 @@ def show(
         table.add_column("Items", justify="right")
         table.add_column("Edges")
         for node in graph_data:
-            node_style = "green italic"
+            node_style = "dim italic"
             if not node["temp"]:
                 node_style = "green" if node["len"] else "green dim"
             edge_string = Text()
+            first = True
             for edge in node["edges"]:
+                if not first:
+                    edge_string.append("\n")
+                first = False
                 edge_string.append(
                     f"{edge['edge'].name} -> ",
                     style="cyan",
