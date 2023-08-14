@@ -444,7 +444,7 @@ class Pipeline:
         loop = asyncio.new_event_loop()
 
         # start beaker is the first beaker in the topological sort that's in only_beakers
-        topo_order = networkx.topological_sort(self.graph)
+        topo_order = list(networkx.topological_sort(self.graph))
         if only_beakers:
             topo_order = [b for b in topo_order if b in only_beakers]
         start_b = topo_order[0]

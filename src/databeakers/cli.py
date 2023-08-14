@@ -146,16 +146,14 @@ def seed(ctx: typer.Context, name: str) -> None:
 @app.command()
 def run(
     ctx: typer.Context,
-    input: Annotated[Optional[List[str]], typer.Option(...)] = None,
-    start: Optional[str] = typer.Option(None),
-    end: Optional[str] = typer.Option(None),
+    only: Annotated[Optional[List[str]], typer.Option(...)] = None,
     mode: RunMode = typer.Option("waterfall"),
 ) -> None:
     has_data = any(ctx.obj.beakers.values())
-    if not input and not has_data:
+    if not has_data:
         typer.secho("No data! Run seed(s) first.", fg=typer.colors.RED)
         raise typer.Exit(1)
-    report = ctx.obj.run(mode, start, end)
+    report = ctx.obj.run(mode, only)
 
     table = Table(title="Run Report", show_header=False, show_lines=False)
 
@@ -166,8 +164,7 @@ def run(
     table.add_row("End Time", report.end_time.strftime("%H:%M:%S %b %d"))
     duration = report.end_time - report.start_time
     table.add_row("Duration", str(duration))
-    table.add_row("Start Beaker", report.start_beaker or "-")
-    table.add_row("End Beaker", report.end_beaker or "-")
+    table.add_row("Beakers", report.only_beakers or "-")
     table.add_row("Run Mode", report.run_mode.value)
 
     from_to_table = Table()
