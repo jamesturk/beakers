@@ -45,17 +45,21 @@ def test_run_seed_twice():
     assert result.exit_code == 1
 
 
-def test_reset_seeds():
+def test_clear_all():
     fruits.reset()
     runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
-    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "reset"])
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "clear", "--all"]
+    )
     assert result.output == "Reset 1 seeds\nReset word (3)\n"
     assert result.exit_code == 0
 
 
-def test_reset_nothing():
+def test_clear_nothing():
     fruits.reset()
-    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "reset"])
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "clear", "--all"]
+    )
     assert result.output == "Nothing to reset!\n"
     assert result.exit_code == 1
 

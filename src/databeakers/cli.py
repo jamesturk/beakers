@@ -50,20 +50,13 @@ def main(
 
 
 @app.command()
-def reset(ctx: typer.Context) -> None:
-    reset_list = ctx.obj.reset()
-    if not reset_list:
-        typer.secho("Nothing to reset!", fg=typer.colors.YELLOW)
-        raise typer.Exit(1)
-    for item in reset_list:
-        typer.secho(f"Reset {item}", fg=typer.colors.RED)
-
-
-@app.command()
 def show(
     ctx: typer.Context,
     watch: bool = typer.Option(False, "--watch", "-w"),
 ) -> None:
+    """
+    Show the current state of the pipeline.
+    """
     pipeline = ctx.obj
 
     def _make_table() -> Table:
@@ -119,6 +112,9 @@ def graph(ctx: typer.Context) -> None:
 
 @app.command()
 def seeds(ctx: typer.Context) -> None:
+    """
+    List the available seeds and their status.
+    """
     for beaker, seeds in ctx.obj.list_seeds().items():
         typer.secho(beaker)
         for seed in seeds:
@@ -130,6 +126,9 @@ def seeds(ctx: typer.Context) -> None:
 
 @app.command()
 def seed(ctx: typer.Context, name: str) -> None:
+    """
+    Run a seed.
+    """
     try:
         start_time = time.time()
         num_items = ctx.obj.run_seed(name)
@@ -149,6 +148,9 @@ def run(
     only: Annotated[Optional[List[str]], typer.Option(...)] = None,
     mode: RunMode = typer.Option("waterfall"),
 ) -> None:
+    """
+    Execute the pipeline, or a part of it.
+    """
     has_data = any(ctx.obj.beakers.values())
     if not has_data:
         typer.secho("No data! Run seed(s) first.", fg=typer.colors.RED)
@@ -184,8 +186,24 @@ def run(
 @app.command()
 def clear(
     ctx: typer.Context,
-    beaker_name: str,
+    beaker_name: Optional[str] = typer.Argument(None),
+    all: bool = typer.Option(False, "--all", "-a"),
 ) -> None:
+    """
+    Clear a beaker's data.
+    """
+    if all:
+        reset_list = ctx.obj.reset()
+        if not reset_list:
+            typer.secho("Nothing to reset!", fg=typer.colors.YELLOW)
+            raise typer.Exit(1)
+        for item in reset_list:
+            typer.secho(f"Reset {item}", fg=typer.colors.RED)
+        return
+
+    if not beaker_name:
+        typer.secho("Must specify a beaker name", fg=typer.colors.RED)
+
     if beaker_name not in ctx.obj.beakers:
         typer.secho(f"Beaker {beaker_name} not found", fg=typer.colors.RED)
         raise typer.Exit(1)
