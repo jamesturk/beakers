@@ -117,6 +117,18 @@ class Pipeline:
                 func=edge.func,
                 name=edge.name,
             )
+        elif item_annotation == Record or edge.whole_record:
+            # if either is true, both must be
+            if not edge.whole_record:
+                raise InvalidGraph(
+                    f"{edge.name} expects databeakers.record.Record, "
+                    f"but edge.whole_record is False"
+                )
+            elif item_annotation != Record:
+                raise InvalidGraph(
+                    f"{edge.name} expects {item_annotation.__name__}, "
+                    f"but edge.whole_record is True"
+                )
         elif not issubclass(
             from_model, item_annotation
         ):  # accept subclasses as parameters
