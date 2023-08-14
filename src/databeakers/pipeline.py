@@ -44,6 +44,7 @@ class Pipeline:
             )"""
         )
         cursor.execute("PRAGMA journal_mode=WAL;")
+        cursor.execute("PRAGMA synchronous=1;")
         # result = cursor.fetchone()
         # if tuple(result)[0] != "wal":
         #     raise SystemError(f"Unable to set WAL mode {result[0]}")
@@ -100,7 +101,7 @@ class Pipeline:
 
         # check from/parameter type
         if from_beaker not in self.beakers:
-            raise InvalidGraph(f"{to_beaker} not found")
+            raise InvalidGraph(f"{from_beaker} not found")
         from_model = self.beakers[from_beaker].model
         signature = inspect.signature(edge.func)
         param_annotations = [p.annotation for p in signature.parameters.values()]
