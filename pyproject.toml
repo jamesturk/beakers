@@ -21,6 +21,7 @@ structlog = "^23.1.0"
 rich = "^13.4.2"
 toml = "^0.10.2"
 pydantic-settings = "^2.0.2"
+pydot = "^1.4.2"
 
 
 [tool.poetry.group.dev.dependencies]

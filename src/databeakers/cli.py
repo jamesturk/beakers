@@ -8,7 +8,6 @@ from rich import print
 from rich.table import Table
 from rich.text import Text
 from rich.live import Live
-from pprint import pprint
 from typing import List, Optional
 from typing_extensions import Annotated
 
@@ -107,7 +106,10 @@ def show(
 
 @app.command()
 def graph(ctx: typer.Context) -> None:
-    pprint(ctx.obj.graph_data())
+    dotg = ctx.obj.to_pydot()
+    filename = "graph.svg"
+    dotg.write_svg(filename, prog="dot")
+    typer.secho(f"Graph written to {filename}", fg=typer.colors.GREEN)
 
 
 @app.command()

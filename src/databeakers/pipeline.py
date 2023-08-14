@@ -3,6 +3,7 @@ import sqlite3
 import asyncio
 import datetime
 import networkx  # type: ignore
+import pydot
 from collections import defaultdict
 from typing import Iterable, Callable, Type
 from pydantic import BaseModel
@@ -612,3 +613,26 @@ class Pipeline:
                     from_to.extend(r)
 
         return from_to
+
+    def to_pydot(self):
+        pydg = pydot.Dot(graph_type="digraph")
+        for b in self.beakers.values():
+            if b.model == ErrorType:
+                pydg.add_node(pydot.Node(b.name, color="red"))
+            elif isinstance(b, TempBeaker):
+                pydg.add_node(pydot.Node(b.name, color="grey"))
+            else:
+                pydg.add_node(pydot.Node(b.name, color="blue"))
+        for from_b, to_b, e in self.graph.edges(data=True):
+            edge = e["edge"]
+            pydg.add_edge(pydot.Edge(from_b, to_b, label=edge.name))
+            for error_types, error_beaker_name in edge.error_map.items():
+                pydg.add_edge(
+                    pydot.Edge(
+                        from_b,
+                        error_beaker_name,
+                        label=f"errors: {error_types}",
+                        color="red",
+                    )
+                )
+        return pydg
