@@ -5,6 +5,7 @@ import datetime
 import networkx  # type: ignore
 import pydot
 from collections import defaultdict
+from collections.abc import Generator
 from typing import Iterable, Callable, Type
 from pydantic import BaseModel
 from structlog import get_logger
@@ -158,13 +159,15 @@ class Pipeline:
                     func=edge.func,
                     name=edge.name,
                 )
-            elif edge.edge_type == EdgeType.transform and not issubclass(
-                to_model, signature.return_annotation
-            ):
-                raise InvalidGraph(
-                    f"{edge.name} returns {signature.return_annotation.__name__}, "
-                    f"{to_beaker} expects {to_model.__name__}"
-                )
+            elif edge.edge_type == EdgeType.transform:
+                ret_ann = signature.return_annotation
+                if ret_ann.__name__ == "Generator":
+                    ret_ann = ret_ann.__args__[0]
+                if not issubclass(to_model, ret_ann):
+                    raise InvalidGraph(
+                        f"{edge.name} returns {signature.return_annotation.__name__}, "
+                        f"{to_beaker} expects {to_model.__name__}"
+                    )
             elif (
                 edge.edge_type == EdgeType.conditional
                 and signature.return_annotation != bool
@@ -232,7 +235,7 @@ class Pipeline:
         num_items = 0
         with self.db:
             for item in seed_func():
-                beaker.add_item(item)
+                beaker.add_item(item, parent=None)
                 num_items += 1
             self.db.execute(
                 "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
@@ -346,7 +349,7 @@ class Pipeline:
         return rec
 
     def _all_upstream(self, to_beaker: Beaker, edge: Edge):
-        all_upstream = to_beaker.id_set()
+        all_upstream = to_beaker.parent_id_set()
         for error_b in edge.error_map.values():
             all_upstream |= self.beakers[error_b].id_set()
         return all_upstream
@@ -529,7 +532,8 @@ class Pipeline:
                             exception=str(e),
                             exc_type=str(type(e)),
                         ),
-                        id,
+                        parent=id,
+                        id_=id,
                     )
                     return error_beaker.name
             else:
@@ -540,15 +544,24 @@ class Pipeline:
         match edge.edge_type:
             case EdgeType.transform:
                 # transform: add result to to_beaker (if not None)
-                if result is not None:
-                    to_beaker.add_item(result, id)
+                if isinstance(result, Generator):
+                    num_yielded = 0
+                    for i in result:
+                        to_beaker.add_item(i, parent=id, id_=None)
+                        num_yielded += 1
+                    log.info(
+                        "generator yielded", edge=edge, id=id, num_yielded=num_yielded
+                    )
+                    to_beaker_name = to_beaker.name if num_yielded else "_none"
+                elif result is not None:
+                    to_beaker.add_item(result, parent=id, id_=id)
                     to_beaker_name = to_beaker.name
                 else:
                     to_beaker_name = "_none"
             case EdgeType.conditional:
                 # conditional: add item to to_beaker if e_func returns truthy
                 if result:
-                    to_beaker.add_item(item, id)
+                    to_beaker.add_item(item, parent=id, id_=id)
                     to_beaker_name = to_beaker.name
                 else:
                     to_beaker_name = "_none"

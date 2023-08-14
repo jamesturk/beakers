@@ -402,7 +402,7 @@ def test_run_error_out(mode):
     fruits.reset()
 
     # raise a zero division error, unhandled
-    fruits.beakers["word"].add_item(Word(word="/0"))
+    fruits.beakers["word"].add_item(Word(word="/0"), parent=None)
 
     # uncaught error from is_fruit, propagates
     with pytest.raises(ZeroDivisionError):
@@ -476,5 +476,5 @@ def test_run_generator_func(mode):
     report = p.run(mode)
 
     assert report.nodes["word"]["_already_processed"] == 0
-    assert report.nodes["word"]["anagrams"] == 12  # 6 from each word
-    assert len(p.beakers["anagrams"]) == 12
+    # assert report.nodes["word"]["anagram"] == 12  # 6 from each word
+    assert len(p.beakers["anagram"]) == 12

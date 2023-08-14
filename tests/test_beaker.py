@@ -17,9 +17,9 @@ def test_length(beakerCls):
     pipeline = Pipeline("test", ":memory:")
     beaker = beakerCls("test", Word, pipeline)
     assert len(beaker) == 0
-    beaker.add_item(Word(word="one"))
+    beaker.add_item(Word(word="one"), parent=None)
     assert len(beaker) == 1
-    beaker.add_item(Word(word="two"))
+    beaker.add_item(Word(word="two"), parent=None)
     assert len(beaker) == 2
 
 
@@ -27,8 +27,8 @@ def test_length(beakerCls):
 def test_items(beakerCls):
     pipeline = Pipeline("test", ":memory:")
     beaker = beakerCls("test", Word, pipeline)
-    beaker.add_item(Word(word="one"))
-    beaker.add_item(Word(word="two"))
+    beaker.add_item(Word(word="one"), parent=None)
+    beaker.add_item(Word(word="two"), parent=None)
     items = list(beaker.items())
     assert len(items[0][0]) == 36  # uuid
     assert items[0][1] == Word(word="one")
@@ -40,26 +40,20 @@ def test_items(beakerCls):
 def test_reset(beakerCls):
     pipeline = Pipeline("test", ":memory:")
     beaker = beakerCls("test", Word, pipeline)
-    beaker.add_item(Word(word="one"))
-    beaker.add_item(Word(word="two"))
+    beaker.add_item(Word(word="one"), parent=None)
+    beaker.add_item(Word(word="two"), parent=None)
     assert len(beaker) == 2
     beaker.reset()
     assert len(beaker) == 0
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
-def test_add_items(beakerCls):
-    pipeline = Pipeline("test", ":memory:")
-    beaker = beakerCls("test", Word, pipeline)
-    beaker.add_items([Word(word="one"), Word(word="two")])
-    assert len(beaker) == 2
-
-
-@pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
 def test_id_set(beakerCls):
     pipeline = Pipeline("test", ":memory:")
     beaker = beakerCls("test", Word, pipeline)
-    beaker.add_items([Word(word="one"), Word(word="two")])
+    words = [Word(word="one"), Word(word="two")]
+    for word in words:
+        beaker.add_item(word, parent=None)
     assert beaker.id_set() == {id for id, _ in beaker.items()}
 
 
@@ -68,7 +62,8 @@ def test_getitem_basic(beakerCls):
     pipeline = Pipeline("test", ":memory:")
     beaker = beakerCls("test", Word, pipeline)
     words = [Word(word="one"), Word(word="two")]
-    beaker.add_items(words)
+    for word in words:
+        beaker.add_item(word, parent=None)
 
     for id in beaker.id_set():
         assert beaker.get_item(id) in words
