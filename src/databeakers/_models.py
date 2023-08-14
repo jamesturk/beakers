@@ -58,7 +58,6 @@ class RunMode(Enum):
 class RunReport(BaseModel):
     start_time: datetime.datetime
     end_time: datetime.datetime
-    start_beaker: str | None
-    end_beaker: str | None
+    only_beakers: list[str] = []
     run_mode: RunMode
     nodes: dict[str, dict[str, int]] = {}

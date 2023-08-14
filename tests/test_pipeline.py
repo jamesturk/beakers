@@ -261,8 +261,7 @@ def test_run_fruits(mode):
     assert len(fruits.beakers["word"]) == 3
     report = fruits.run(mode)
 
-    assert report.start_beaker is None
-    assert report.end_beaker is None
+    assert report.only_beakers == []
     assert report.start_time is not None
     assert report.end_time is not None
 
@@ -293,10 +292,9 @@ def test_run_early_end(mode):
     fruits.reset()
     fruits.run_seed("abc")
     assert len(fruits.beakers["word"]) == 3
-    report = fruits.run(mode, end_beaker="fruit")
+    report = fruits.run(mode, only_beakers=["word", "normalized"])
 
-    assert report.start_beaker is None
-    assert report.end_beaker == "fruit"
+    assert report.only_beakers == ["word", "normalized"]
 
     assert report.nodes["word"]["_already_processed"] == 0
     assert report.nodes["word"]["normalized"] == 3
@@ -325,10 +323,9 @@ def test_run_late_start(mode):
     fruits.run_seed("prenormalized")
     assert len(fruits.beakers["word"]) == 0
     assert len(fruits.beakers["normalized"]) == 5
-    report = fruits.run(mode, start_beaker="normalized")
+    report = fruits.run(mode, only_beakers=["normalized", "fruit", "sentence"])
 
-    assert report.start_beaker == "normalized"
-    assert report.end_beaker is None
+    assert report.only_beakers == ["normalized", "fruit", "sentence"]
 
     assert "word" not in report.nodes
     assert report.nodes["normalized"]["_already_processed"] == 0
@@ -441,11 +438,6 @@ def test_run_async_functions_in_pipeline(mode):
     async_test.run_seed("words")
     assert len(async_test.beakers["word"]) == 60
     report = async_test.run(mode)
-
-    assert report.start_beaker is None
-    assert report.end_beaker is None
-    assert report.start_time is not None
-    assert report.end_time is not None
 
     assert report.nodes["word"]["_already_processed"] == 0
     assert report.nodes["word"]["sentence"] == 60

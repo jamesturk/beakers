@@ -274,11 +274,10 @@ class Pipeline:
     def run(
         self,
         run_mode: RunMode,
-        start_beaker: str | None = None,
-        end_beaker: str | None = None,
+        only_beakers: list[str] | None = None,
     ) -> RunReport:
         """
-        Run the pipeline in waterfall mode.
+        Run the pipeline.
 
         In a waterfall run, beakers are processed one at a time, based on a
         topological sort of the graph.
@@ -287,14 +286,12 @@ class Pipeline:
         followed by beakers that depend on those beakers, and so on.
 
         Args:
-            start_beaker: the name of the beaker to start processing at
-            end_beaker: the name of the beaker to stop processing at
+            only_beakers: If provided, only run these beakers.
         """
         report = RunReport(
             start_time=datetime.datetime.now(),
             end_time=datetime.datetime.now(),
-            start_beaker=start_beaker,
-            end_beaker=end_beaker,
+            only_beakers=only_beakers or [],
             run_mode=run_mode,
             nodes={},
         )
@@ -302,29 +299,19 @@ class Pipeline:
 
         # go through each node in forward order
         if run_mode == RunMode.waterfall:
-            return self._run_waterfall(start_beaker, end_beaker, report)
+            return self._run_waterfall(only_beakers, report)
         elif run_mode == RunMode.river:
-            return self._run_river(start_beaker, end_beaker, report)
+            return self._run_river(only_beakers, report)
         else:
             raise ValueError(f"Unknown run mode {run_mode}")  # pragma: no cover
 
     def _run_waterfall(
-        self, start_beaker: str | None, end_beaker: str | None, report: RunReport
+        self, only_beakers: list[str] | None, report: RunReport
     ) -> RunReport:
-        started = False if start_beaker else True
         for node in networkx.topological_sort(self.graph):
-            # only process nodes between start and end
-            if not started:
-                if node == start_beaker:
-                    started = True
-                    log.info("partial run start", node=node)
-                else:
-                    log.info("partial run skip", node=node, waiting_for=start_beaker)
-                    continue
-            if end_beaker and node == end_beaker:
-                log.info("partial run end", node=node)
-                break
-
+            if only_beakers and node not in only_beakers:
+                log.info("skipping beaker", beaker=node, only_beakers=only_beakers)
+                continue
             # push data from this node to downstream nodes
             report.nodes[node] = self._run_node_waterfall(node)
 
@@ -453,10 +440,16 @@ class Pipeline:
             raise to_raise
         return node_report
 
-    def _run_river(self, start_b, end_b, report: RunReport) -> RunReport:
+    def _run_river(self, only_beakers, report: RunReport) -> RunReport:
         loop = asyncio.new_event_loop()
-        if not start_b:
-            start_b = list(networkx.topological_sort(self.graph))[0]
+
+        # start beaker is the first beaker in the topological sort that's in only_beakers
+        topo_order = networkx.topological_sort(self.graph)
+        if only_beakers:
+            topo_order = [b for b in topo_order if b in only_beakers]
+        start_b = topo_order[0]
+        log.info("starting river run", start_beaker=start_b, only_beakers=only_beakers)
+
         start_beaker = self.beakers[start_b]
         report.nodes = defaultdict(lambda: defaultdict(int))
 
@@ -464,7 +457,7 @@ class Pipeline:
             record = self._get_full_record(id)
             log.info("river record", id=id, record=record)
             for from_b, to_b in loop.run_until_complete(
-                self._run_one_item_river(record, start_b, end_b)
+                self._run_one_item_river(record, start_b, only_beakers)
             ):
                 report.nodes[from_b][to_b] += 1
 
@@ -551,7 +544,7 @@ class Pipeline:
         return to_beaker_name
 
     async def _run_one_item_river(
-        self, record: Record, cur_b: str, end_b: str
+        self, record: Record, cur_b: str, only_beakers: list[str] | None = None
     ) -> list[tuple[str, str]]:
         """
         Run a single item through a single beaker.
@@ -561,7 +554,6 @@ class Pipeline:
         Return list of (from, to) pairs.
         """
         subtasks = []
-        stop_early = False
         from_to = []
 
         # fan an item out to all downstream beakers
@@ -575,19 +567,31 @@ class Pipeline:
                 # already processed this item, nothing to do
                 continue
 
-            if to_b == end_b:
-                stop_early = True
-
             result_beaker = await self._run_edge_func(
                 cur_b, edge, to_beaker, record.id, record=record
             )
             from_to.append((cur_b, result_beaker))
-            subtasks.append(self._run_one_item_river(record, result_beaker, end_b))
+            if only_beakers and result_beaker not in only_beakers:
+                continue
+
+            # add subtask to run next beaker in the chain
+            if not only_beakers or result_beaker in only_beakers:
+                subtasks.append(
+                    self._run_one_item_river(record, result_beaker, only_beakers)
+                )
+            else:
+                log.info(
+                    "skipping beaker",
+                    beaker=result_beaker,
+                    only_beakers=only_beakers,
+                )
 
         log.info(
-            "river subtasks", cur_b=cur_b, subtasks=len(subtasks), stop_early=stop_early
+            "river subtasks",
+            cur_b=cur_b,
+            subtasks=len(subtasks),
         )
-        if subtasks and not stop_early:
+        if subtasks:
             results = await asyncio.gather(*subtasks, return_exceptions=True)
             for r in results:
                 if isinstance(r, Exception):
