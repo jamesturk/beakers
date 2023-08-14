@@ -178,7 +178,7 @@ def run(
     table.add_row("End Time", report.end_time.strftime("%H:%M:%S %b %d"))
     duration = report.end_time - report.start_time
     table.add_row("Duration", str(duration))
-    table.add_row("Beakers", report.only_beakers or "-")
+    table.add_row("Beakers", ", ".join(report.only_beakers) or "(all)")
     table.add_row("Run Mode", report.run_mode.value)
 
     from_to_table = Table()
