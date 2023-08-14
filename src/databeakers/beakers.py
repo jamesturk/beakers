@@ -106,6 +106,11 @@ class SqliteBeaker(Beaker):
     def add_item(self, item: BaseModel, id: str | None = None) -> None:
         if id is None:
             id = str(uuid.uuid1())
+        if not hasattr(item, "model_dump_json"):
+            raise TypeError(
+                f"beaker {self.name} received {item!r} ({type(item)}), "
+                f"expecting an instance of {self.model}"
+            )
         self.pipeline.db.execute(
             f"INSERT INTO {self.name} (uuid, data) VALUES (?, ?)",
             (id, item.model_dump_json()),
