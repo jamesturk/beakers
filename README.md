@@ -13,9 +13,9 @@ If you're interested in poking around, thoughts and feedback are welcome, please
 - [x] Developer-friendly CLI for running processes
 - [x] Synchronous mode for ease of debugging or simple pipelines
 - [x] Data checkpoints stored in local database for intermediate caching & resuming interrupted runs
-- [ ] Asynchronous task execution
+- [x] Asynchronous task execution
 - [ ] Support for multiple backends (sqlite, postgres, etc)
-- [ ] Robust error handling, including retries
+- [x] Robust error handling, including retries
 
 ## Guiding Principles
 

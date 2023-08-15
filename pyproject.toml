@@ -30,6 +30,7 @@ mypy = "^1.4.1"
 ruff = "^0.0.278"
 pytest-cov = "^4.1.0"
 pytest-asyncio = "^0.21.1"
+types-toml = "^0.10.8.7"
 
 [tool.ruff]
 line-length = 100

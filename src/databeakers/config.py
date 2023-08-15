@@ -1,5 +1,6 @@
 import structlog
 import pydantic
+import toml  # type: ignore
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +24,11 @@ class Config(BaseSettings):
 
 
 def load_config(**overrides):
-    # TODO: toml, env, command line & test
+    try:
+        tomldata = toml.load("databeakers.toml")
+        overrides.update(tomldata["databeakers"])
+    except FileNotFoundError:
+        pass
     config = Config(**overrides)
     # configure log output
     processors = [
