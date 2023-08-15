@@ -61,6 +61,15 @@ class Beaker(abc.ABC):
         Return set of parent ids.
         """
 
+    @abc.abstractmethod
+    def delete(self, parent: str) -> int:
+        """
+        Delete all items with the given parent id.
+
+        Return number of items deleted.
+        """
+        return 0
+
     def id_set(self) -> set[str]:
         return set(id for id, _ in self.items())
 
@@ -98,6 +107,15 @@ class TempBeaker(Beaker):
 
     def parent_id_set(self) -> set[str]:
         return set(self._parent_ids.values())
+
+    def delete(self, parent: str) -> int:
+        deleted = 0
+        for id, parent_id in self._parent_ids.items():
+            if parent_id == parent:
+                del self._items[id]
+                del self._parent_ids[id]
+                deleted += 1
+        return deleted
 
 
 class SqliteBeaker(Beaker):
@@ -153,3 +171,10 @@ class SqliteBeaker(Beaker):
     def parent_id_set(self) -> set[str]:
         cursor = self.pipeline.db.execute(f"SELECT parent FROM {self.name}")
         return set(row["parent"] for row in cursor.fetchall())
+
+    def delete(self, parent: str) -> int:
+        cursor = self.pipeline.db.execute(
+            f"DELETE FROM {self.name} WHERE parent = ?", (parent,)
+        )
+        self.pipeline.db.commit()
+        return cursor.rowcount
