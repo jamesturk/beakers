@@ -1,6 +1,7 @@
 import time
 import enum
 import asyncio
+import inspect
 from pydantic import BaseModel
 from structlog import get_logger
 from ._utils import callable_name
@@ -31,7 +32,7 @@ class RateLimit:
                 await asyncio.sleep(diff)
         self.last_call = time.time()
         result = self.edge_func(item)
-        if asyncio.iscoroutine(result):
+        if inspect.isawaitable(result):
             return await result
         return result
 
@@ -83,7 +84,7 @@ class Conditional:
     async def __call__(self, item: BaseModel) -> BaseModel:
         if self.condition(item):
             result = self.edge_func(item)
-            if asyncio.iscoroutine(result):
+            if inspect.isawaitable(result):
                 return await result
             return result
         elif self.if_false == IfFalse.drop:
