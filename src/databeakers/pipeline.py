@@ -126,7 +126,8 @@ class Pipeline:
                     f"{edge.name} expects databeakers.record.Record, "
                     f"but edge.whole_record is False"
                 )
-            elif item_annotation != Record:
+            # TODO: re-evaluate? BaseModel added because of the way the conditional decorator works
+            elif item_annotation not in (Record, BaseModel):
                 raise InvalidGraph(
                     f"{edge.name} expects {item_annotation.__name__}, "
                     f"but edge.whole_record is True"
@@ -326,7 +327,6 @@ class Pipeline:
     ) -> RunReport:
         for node in networkx.topological_sort(self.graph):
             if only_beakers and node not in only_beakers:
-                log.info("skipping beaker", beaker=node, only_beakers=only_beakers)
                 continue
             # push data from this node to downstream nodes
             report.nodes[node] = self._run_node_waterfall(node)
@@ -416,7 +416,7 @@ class Pipeline:
                 except RuntimeError:
                     # queue closed
                     return  # pragma: no cover
-                log.info("task accepted", worker=name, id=id, item=item, edge=edge.name)
+                log.info("task accepted", worker=name, id=id, edge=edge.name)
 
                 try:
                     with self.db:
@@ -430,9 +430,7 @@ class Pipeline:
                     raise
                 finally:
                     queue.task_done()
-                    log.info(
-                        "task done", worker=name, id=id, item=item, sent_to=result_loc
-                    )
+                    log.info("task done", worker=name, id=id, sent_to=result_loc)
 
         workers = [
             asyncio.create_task(queue_worker(f"worker-{i}", queue))
@@ -471,7 +469,7 @@ class Pipeline:
 
         for id in start_beaker.id_set():
             record = self._get_full_record(id)
-            log.info("river record", id=id, record=record)
+            log.info("river record", id=id)
             for from_b, to_b in loop.run_until_complete(
                 self._run_one_item_river(record, start_b, only_beakers)
             ):
@@ -518,7 +516,6 @@ class Pipeline:
                 edge=edge,
                 id=id,
                 item=item,
-                record=record,
             )
             for (
                 error_types,
