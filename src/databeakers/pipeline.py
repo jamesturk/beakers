@@ -234,6 +234,7 @@ class Pipeline:
             raise SeedError(f"{seed_name} already run at {seed.imported_at}")
 
         num_items = 0
+        # transaction around seed
         with self.db:
             for item in seed_func():
                 beaker.add_item(item, parent=None)
@@ -249,6 +250,7 @@ class Pipeline:
 
     def reset(self) -> list[str]:
         reset_list = []
+        # transaction around entire reset
         with self.db:
             cursor = self.db.cursor()
             res = cursor.execute("DELETE FROM _seeds")
@@ -419,6 +421,7 @@ class Pipeline:
                 log.info("task accepted", worker=name, id=id, edge=edge.name)
 
                 try:
+                    # transaction around each waterfall step
                     with self.db:
                         result_loc = await self._run_edge_func(
                             from_beaker.name, edge, to_beaker, id, item=item
@@ -468,12 +471,14 @@ class Pipeline:
         report.nodes = defaultdict(lambda: defaultdict(int))
 
         for id in start_beaker.id_set():
-            record = self._get_full_record(id)
-            log.info("river record", id=id)
-            for from_b, to_b in loop.run_until_complete(
-                self._run_one_item_river(record, start_b, only_beakers)
-            ):
-                report.nodes[from_b][to_b] += 1
+            # transaction around river runs
+            with self.db:
+                record = self._get_full_record(id)
+                log.info("river record", id=id)
+                for from_b, to_b in loop.run_until_complete(
+                    self._run_one_item_river(record, start_b, only_beakers)
+                ):
+                    report.nodes[from_b][to_b] += 1
 
         return report
 
