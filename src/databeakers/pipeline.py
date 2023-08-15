@@ -223,22 +223,29 @@ class Pipeline:
         else:
             return None
 
-    def run_seed(self, seed_name: str) -> int:
+    def run_seed(self, seed_name: str, max_items: int = 0, reset: bool = False) -> int:
         try:
             beaker_name, seed_func = self.seeds[seed_name]
         except KeyError:
             raise SeedError(f"Seed {seed_name} not found")
         beaker = self.beakers[beaker_name]
 
-        if seed := self._db_get_seed(seed_name):
-            raise SeedError(f"{seed_name} already run at {seed.imported_at}")
-
         num_items = 0
+        parent_id = f"seed:{seed_name}"
         # transaction around seed
         with self.db:
+            if reset:
+                beaker.delete(parent=parent_id)
+                self.db.execute("DELETE FROM _seeds WHERE name = ?", (seed_name,))
+
+            if seed := self._db_get_seed(seed_name):
+                raise SeedError(f"{seed_name} already run at {seed.imported_at}")
+
             for item in seed_func():
-                beaker.add_item(item, parent=None)
+                beaker.add_item(item, parent=parent_id)
                 num_items += 1
+                if max_items and num_items >= max_items:
+                    break
             self.db.execute(
                 "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
                 (seed_name, beaker_name, num_items),

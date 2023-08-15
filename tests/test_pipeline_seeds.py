@@ -54,10 +54,22 @@ def test_run_seed_already_run(pipeline):
     assert len(pipeline.beakers["word"]) == 1
 
 
-def test_reset_seeds(pipeline):
+def test_reset_all_resets_seeds(pipeline):
     pipeline.run_seed("one")
     pipeline.run_seed("many")
     assert len(pipeline.beakers["word"]) == 4
     reset_list = pipeline.reset()
     assert reset_list == ["2 seeds", "word (4)"]
     assert len(pipeline.beakers["word"]) == 0
+
+
+def test_run_seed_limit(pipeline):
+    pipeline.run_seed("many", max_items=2)
+    assert len(pipeline.beakers["word"]) == 2
+
+
+def test_run_seed_reset(pipeline):
+    pipeline.run_seed("many")
+    assert len(pipeline.beakers["word"]) == 3
+    pipeline.run_seed("many", reset=True)
+    assert len(pipeline.beakers["word"]) == 3

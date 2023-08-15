@@ -138,13 +138,18 @@ def seeds(ctx: typer.Context) -> None:
 
 
 @app.command()
-def seed(ctx: typer.Context, name: str) -> None:
+def seed(
+    ctx: typer.Context,
+    name: str,
+    num_items: int = typer.Option(0, "--num-items", "-n"),
+    reset: bool = typer.Option(False, "--reset", "-r"),
+) -> None:
     """
     Run a seed.
     """
     try:
         start_time = time.time()
-        num_items = ctx.obj.run_seed(name)
+        num_items = ctx.obj.run_seed(name, num_items, reset)
         duration = time.time() - start_time
         duration_dt = datetime.timedelta(seconds=duration)
         typer.secho(
