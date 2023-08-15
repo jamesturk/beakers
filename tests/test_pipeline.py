@@ -197,10 +197,20 @@ def test_graph_data_simple():
     )
     gd = r.graph_data()
     assert len(gd) == 3
-    assert gd[0] == {
+    assert gd[0]["len"] == 0
+    assert gd[0]["name"] == "capitalized"
+    assert gd[0]["temp"] is False
+    assert gd[0]["edges"][0]["to_beaker"] == "filtered"
+    assert gd[0]["edges"][0]["edge"].name == "λ"
+    assert gd[1] == {
+        "len": 0,
+        "name": "filtered",
+        "temp": False,
+        "edges": [],
+    }
+    assert gd[2] == {
         "len": 0,
         "name": "word",
-        "rank": 1,
         "temp": False,
         "edges": [
             {
@@ -215,44 +225,6 @@ def test_graph_data_simple():
             }
         ],
     }
-    assert gd[1]["len"] == 0
-    assert gd[1]["name"] == "capitalized"
-    assert gd[1]["rank"] == 2
-    assert gd[1]["temp"] is False
-    assert gd[1]["edges"][0]["to_beaker"] == "filtered"
-    assert gd[1]["edges"][0]["edge"].name == "λ"
-    assert gd[2] == {
-        "len": 0,
-        "name": "filtered",
-        "rank": 3,
-        "temp": False,
-        "edges": [],
-    }
-
-
-def test_graph_data_multiple_rank():
-    r = Pipeline("test")
-    r.add_beaker("nouns", Word)
-    r.add_beaker("verbs", Word)
-    r.add_beaker("normalized", Word)
-    r.add_beaker("english", Word)
-    r.add_beaker("spanish", Word)
-    r.add_transform("nouns", "normalized", lambda x: x)
-    r.add_transform("verbs", "normalized", lambda x: x)
-    r.add_transform("normalized", "english", lambda x: x)
-    r.add_transform("normalized", "spanish", lambda x: x)
-    gd = r.graph_data()
-    assert len(gd) == 5
-    assert gd[0]["name"] == "nouns"
-    assert gd[0]["rank"] == 1
-    assert gd[1]["name"] == "verbs"
-    assert gd[1]["rank"] == 1
-    assert gd[2]["name"] == "normalized"
-    assert gd[2]["rank"] == 2
-    assert gd[3]["name"] == "english"
-    assert gd[3]["rank"] == 3
-    assert gd[4]["name"] == "spanish"
-    assert gd[4]["rank"] == 3
 
 
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])

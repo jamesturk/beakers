@@ -275,18 +275,12 @@ class Pipeline:
                 "edges": [],
             }
 
-            rank = 0
-            for from_b, to_b, edge in self.graph.in_edges(node, data=True):
-                if nodes[from_b]["rank"] > rank:
-                    rank = nodes[from_b]["rank"]
-            nodes[node]["rank"] = rank + 1
-
-            for from_b, to_b, edge in self.graph.out_edges(node, data=True):
+            for _, to_b, edge in self.graph.out_edges(node, data=True):
                 edge["to_beaker"] = to_b
                 nodes[node]["edges"].append(edge)
 
         # all data collected for display
-        return sorted(nodes.values(), key=lambda x: (x["rank"], x["name"]))
+        return sorted(nodes.values(), key=lambda x: x["name"])
 
     # section: running ########################################################
 

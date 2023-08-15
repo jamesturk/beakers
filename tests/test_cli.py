@@ -73,13 +73,13 @@ def test_show():
 ┃ Node       ┃ Items ┃ Edges                        ┃
 ┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
 │ errors     │     0 │                              │
+│ fruit      │     0 │ λ -> sentence                │
 │ nonword    │     0 │                              │
-│ word       │     0 │ λ -> normalized              │
-│            │       │    AttributeError -> nonword │
 │ normalized │     - │ is_fruit -> fruit            │
 │            │       │    ValueError -> errors      │
-│ fruit      │     0 │ λ -> sentence                │
 │ sentence   │     0 │                              │
+│ word       │     0 │ λ -> normalized              │
+│            │       │    AttributeError -> nonword │
 └────────────┴───────┴──────────────────────────────┘
 """
     )
