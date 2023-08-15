@@ -552,7 +552,11 @@ class Pipeline:
                             to_beaker.add_item(i, parent=id, id_=None)
                             num_yielded += 1
                     log.info(
-                        "generator yielded", edge=edge, id=id, num_yielded=num_yielded
+                        "generator yielded",
+                        edge=edge,
+                        id=id,
+                        num_yielded=num_yielded,
+                        to_beaker=to_beaker.name,
                     )
                     to_beaker_name = to_beaker.name if num_yielded else "_none"
                 elif result is not None:

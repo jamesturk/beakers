@@ -83,13 +83,20 @@ class Conditional:
 
     async def __call__(self, item: BaseModel) -> BaseModel:
         if self.condition(item):
+            log.debug("conditional", result=True, conditional=self)
             result = self.edge_func(item)
             if inspect.isawaitable(result):
                 return await result
             return result
         elif self.if_false == IfFalse.drop:
+            log.debug(
+                "conditional", result=False, if_false=self.if_false, conditional=self
+            )
             return
         elif self.if_false == IfFalse.send:
+            log.debug(
+                "conditional", result=False, if_false=self.if_false, conditional=self
+            )
             return item
         else:
             raise ValueError(f"Invalid if_false: {self.if_false}")

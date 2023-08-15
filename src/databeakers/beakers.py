@@ -3,12 +3,15 @@ import json
 import uuid
 from pydantic import BaseModel
 from typing import Iterable, Type, TYPE_CHECKING
+from structlog import get_logger
 from .exceptions import ItemNotFound
 
 if TYPE_CHECKING:  # pragma: no cover
     from .pipeline import Pipeline
 
 PydanticModel = Type[BaseModel]
+
+log = get_logger()
 
 
 class Beaker(abc.ABC):
@@ -128,6 +131,7 @@ class SqliteBeaker(Beaker):
             parent = id_ = str(uuid.uuid1())
         elif id_ is None:
             id_ = str(uuid.uuid1())
+        log.debug("add_item", item=item, parent=parent, id=id_)
         self.pipeline.db.execute(
             f"INSERT INTO {self.name} (uuid, parent, data) VALUES (?, ?, ?)",
             (id_, parent, item.model_dump_json()),
