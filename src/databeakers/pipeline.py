@@ -161,7 +161,7 @@ class Pipeline:
                 )
             elif edge.edge_type == EdgeType.transform:
                 ret_ann = signature.return_annotation
-                if ret_ann.__name__ == "Generator":
+                if ret_ann.__name__ in ("Generator", "AsyncGenerator"):
                     ret_ann = ret_ann.__args__[0]
                 if not issubclass(to_model, ret_ann):
                     raise InvalidGraph(

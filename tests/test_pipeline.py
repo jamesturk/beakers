@@ -482,7 +482,7 @@ def test_run_generator_func(mode):
 
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
 def test_run_async_generator_func(mode):
-    async def anagrams(word: Word) -> AsyncGenerator[Word, None, None]:
+    async def anagrams(word: Word) -> AsyncGenerator[Word, None]:
         for perm in itertools.permutations(str(word.word)):
             yield Word(word="".join(perm))
 
