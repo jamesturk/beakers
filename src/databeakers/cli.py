@@ -3,6 +3,7 @@ import time
 import datetime
 import typer
 import sys
+import re
 from types import SimpleNamespace
 from rich import print
 from rich.table import Table
@@ -224,6 +225,44 @@ def clear(
         if typer.prompt(f"Clear {beaker_name} ({len(beaker)})? [y/N]") == "y":
             beaker.reset()
             typer.secho(f"Cleared {beaker_name}", fg=typer.colors.GREEN)
+
+
+uuid_re = re.compile(r"^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$")
+
+
+@app.command()
+def peek(
+    ctx: typer.Context,
+    thing: Optional[str] = typer.Argument(None),
+):
+    if not thing:
+        typer.secho("Must specify a beaker name or UUID", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    elif uuid_re.match(thing):
+        record = ctx.obj._get_full_record(thing)
+        t = Table(title=thing, show_header=False, show_lines=False)
+        t.add_column("Beaker", style="cyan")
+        t.add_column("Field")
+        t.add_column("Value")
+        for beaker_name in ctx.obj.beakers:
+            try:
+                record[beaker_name]
+                t.add_row(beaker_name, "", "")
+                for field in record[beaker_name].model_fields:
+                    value = getattr(record[beaker_name], field)
+                    if isinstance(value, str):
+                        value = (
+                            value[:20] + f"... ({len(value)})"
+                            if len(value) > 20
+                            else value
+                        )
+                    t.add_row("", field, str(value))
+            except KeyError:
+                pass
+        print(t)
+    else:
+        typer.secho(f"Unknown entity: {thing}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":  # pragma: no cover
