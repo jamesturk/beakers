@@ -1,4 +1,5 @@
 import time
+import enum
 import asyncio
 from pydantic import BaseModel
 from structlog import get_logger
@@ -59,3 +60,35 @@ class Retry:
         # (conditional appeases mypy)
         if exception:
             raise exception
+
+
+class IfFalse(enum.Enum):
+    drop = "drop"
+    send = "send"
+
+
+class Conditional:
+    """
+    Only call the edge if the condition is true.
+    """
+
+    def __init__(self, edge_func, condition, if_false=IfFalse.drop):
+        self.edge_func = edge_func
+        self.condition = condition
+        self.if_false = if_false
+
+    def __repr__(self):
+        return f"Conditional({callable_name(self.edge_func)}, {callable_name(self.condition)})"
+
+    async def __call__(self, item: BaseModel) -> BaseModel:
+        if self.condition(item):
+            result = self.edge_func(item)
+            if asyncio.iscoroutine(result):
+                return await result
+            return result
+        elif self.if_false == IfFalse.drop:
+            return
+        elif self.if_false == IfFalse.send:
+            return item
+        else:
+            raise ValueError(f"Invalid if_false: {self.if_false}")
