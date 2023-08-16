@@ -149,7 +149,7 @@ class Pipeline:
             else:
                 to_model = signature.return_annotation
                 self.add_beaker(to_beaker, to_model)
-                log.info(
+                log.debug(
                     "implicit beaker", beaker=to_beaker, datatype=to_model.__name__
                 )
         else:
@@ -181,7 +181,7 @@ class Pipeline:
         # check error beakers
         for err_b in edge.error_map.values():
             if err_b not in self.beakers:
-                log.info("implicit error beaker", beaker=err_b)
+                log.debug("implicit error beaker", beaker=err_b)
                 self.add_beaker(err_b, ErrorType)
             else:
                 if self.beakers[err_b].model != ErrorType:
@@ -409,7 +409,7 @@ class Pipeline:
                 continue
             queue.put_nowait((id, item))
 
-        log.info("edge queue populated", edge=edge.name, queue_len=queue.qsize())
+        log.debug("edge queue populated", edge=edge.name, queue_len=queue.qsize())
 
         # worker function
         async def queue_worker(name, queue):
@@ -419,7 +419,7 @@ class Pipeline:
                 except RuntimeError:
                     # queue closed
                     return  # pragma: no cover
-                log.info("task accepted", worker=name, id=id, edge=edge.name)
+                log.debug("task accepted", worker=name, id=id, edge=edge.name)
 
                 try:
                     # transaction around each waterfall step
@@ -434,7 +434,7 @@ class Pipeline:
                     raise
                 finally:
                     queue.task_done()
-                    log.info("task done", worker=name, id=id, sent_to=result_loc)
+                    log.debug("task done", worker=name, id=id, sent_to=result_loc)
 
         workers = [
             asyncio.create_task(queue_worker(f"worker-{i}", queue))
@@ -466,7 +466,7 @@ class Pipeline:
         if only_beakers:
             topo_order = [b for b in topo_order if b in only_beakers]
         start_b = topo_order[0]
-        log.info("starting river run", start_beaker=start_b, only_beakers=only_beakers)
+        log.debug("starting river run", start_beaker=start_b, only_beakers=only_beakers)
 
         start_beaker = self.beakers[start_b]
         report.nodes = defaultdict(lambda: defaultdict(int))
@@ -475,7 +475,7 @@ class Pipeline:
             # transaction around river runs
             with self.db:
                 record = self._get_full_record(id)
-                log.info("river record", id=id)
+                log.debug("river record", id=id)
                 for from_b, to_b in loop.run_until_complete(
                     self._run_one_item_river(record, start_b, only_beakers)
                 ):
@@ -516,8 +516,7 @@ class Pipeline:
             if record:
                 record[to_beaker.name] = result
         except Exception as e:
-            log.info(
-                "exception",
+            lg = log.bind(
                 exception=repr(e),
                 edge=edge,
                 id=id,
@@ -528,6 +527,7 @@ class Pipeline:
                 error_beaker_name,
             ) in edge.error_map.items():
                 if isinstance(e, error_types):
+                    lg.info("error handled", error_beaker=error_beaker_name)
                     error_beaker = self.beakers[error_beaker_name]
                     error_beaker.add_item(
                         ErrorType(
@@ -541,6 +541,7 @@ class Pipeline:
                     return error_beaker.name
             else:
                 # no error handler, re-raise
+                log.critical("unhandled error")
                 raise
 
         # propagate result to downstream beakers
