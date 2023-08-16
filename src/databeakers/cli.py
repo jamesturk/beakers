@@ -17,7 +17,8 @@ from .exceptions import SeedError, InvalidGraph
 from .config import load_config
 from .pipeline import Pipeline
 
-app = typer.Typer()
+# TODO: allow re-enabling locals (but is very slow/noisy w/ big text)
+app = typer.Typer(pretty_exceptions_show_locals=False)
 
 
 def _load_pipeline(dotted_path: str) -> SimpleNamespace:
