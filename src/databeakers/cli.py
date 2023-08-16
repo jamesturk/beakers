@@ -13,7 +13,7 @@ from typing import List, Optional
 from typing_extensions import Annotated
 
 from ._models import RunMode
-from .exceptions import SeedError
+from .exceptions import SeedError, InvalidGraph
 from .config import load_config
 from .pipeline import Pipeline
 
@@ -43,7 +43,11 @@ def main(
             fg=typer.colors.RED,
         )
         raise typer.Exit(1)
-    ctx.obj = _load_pipeline(config.pipeline_path)
+    try:
+        ctx.obj = _load_pipeline(config.pipeline_path)
+    except InvalidGraph as e:
+        typer.secho(f"Invalid graph: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
     if not isinstance(ctx.obj, Pipeline):
         typer.secho(f"Invalid pipeline: {config.pipeline_path}")
         raise typer.Exit(1)

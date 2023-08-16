@@ -1,14 +1,14 @@
-class BeakerNotFound(Exception):
-    """Raised when a beaker is not found."""
+class DatabeakerError(Exception):
+    """Base class for exceptions in this module."""
 
 
-class InvalidGraph(Exception):
+class InvalidGraph(DatabeakerError):
     """Raised when a graph is invalid."""
 
 
-class SeedError(Exception):
+class SeedError(DatabeakerError):
     """Raised when a seed fails to run."""
 
 
-class ItemNotFound(Exception):
+class ItemNotFound(DatabeakerError):
     """Raised when an item is not found in a beaker."""
