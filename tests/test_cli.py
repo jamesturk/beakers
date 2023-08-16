@@ -69,6 +69,22 @@ def test_show():
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "show"])
     assert (
         result.output
+        == """┏━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Node ┃ Items ┃ Edges                    ┃
+┡━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│      │       │ (6 empty beakers hidden) │
+└──────┴───────┴──────────────────────────┘
+"""
+    )
+
+
+def test_show_empty():
+    fruits.reset()
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "show", "--empty"]
+    )
+    assert (
+        result.output
         == """┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Node       ┃ Items ┃ Edges                        ┃
 ┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩

@@ -53,6 +53,7 @@ def main(
 def show(
     ctx: typer.Context,
     watch: bool = typer.Option(False, "--watch", "-w"),
+    empty: bool = typer.Option(False, "--empty"),
 ) -> None:
     """
     Show the current state of the pipeline.
@@ -61,11 +62,15 @@ def show(
 
     def _make_table() -> Table:
         graph_data = pipeline.graph_data()
+        empty_count = 0
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Node")
         table.add_column("Items", justify="right")
         table.add_column("Edges")
         for node in graph_data:
+            if not empty and not node["len"]:
+                empty_count += 1
+                continue
             node_style = "dim italic"
             if not node["temp"]:
                 node_style = "green" if node["len"] else "green dim"
@@ -94,6 +99,10 @@ def show(
                 "-" if node["temp"] else str(node["len"]),
                 edge_string,
             )
+
+        if empty_count:
+            table.add_row("", "", f"({empty_count} empty beakers hidden)")
+
         return table
 
     if watch:
