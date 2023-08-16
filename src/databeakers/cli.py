@@ -116,9 +116,11 @@ def show(
 
 @app.command()
 def graph(
-    ctx: typer.Context, filename: str = typer.Option("graph.svg", "--filename", "-f")
+    ctx: typer.Context,
+    filename: str = typer.Option("graph.svg", "--filename", "-f"),
+    excludes: list[str] = typer.Option([], "--exclude", "-e"),
 ) -> None:
-    dotg = ctx.obj.to_pydot()
+    dotg = ctx.obj.to_pydot(excludes)
     if filename.endswith(".svg"):
         dotg.write_svg(filename, prog="dot")
     elif filename.endswith(".png"):

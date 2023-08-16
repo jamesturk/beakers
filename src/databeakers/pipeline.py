@@ -639,11 +639,15 @@ class Pipeline:
 
         return from_to
 
-    def to_pydot(self):
-        pydg = pydot.Dot(graph_type="digraph")
+    def to_pydot(self, excludes: list[str] | None = None):
+        if excludes is None:
+            excludes = []
+        pydg = pydot.Dot(graph_type="digraph", rankdir="LR")
         for b in self.beakers.values():
-            if b.model == ErrorType:
-                pydg.add_node(pydot.Node(b.name, color="red"))
+            if b.name in excludes:
+                continue
+            elif b.model == ErrorType:
+                pydg.add_node(pydot.Node(b.name, color="red", group="errors"))
             elif isinstance(b, TempBeaker):
                 pydg.add_node(pydot.Node(b.name, color="grey"))
             else:
@@ -652,12 +656,14 @@ class Pipeline:
             edge = e["edge"]
             pydg.add_edge(pydot.Edge(from_b, to_b, label=edge.name))
             for error_types, error_beaker_name in edge.error_map.items():
-                pydg.add_edge(
-                    pydot.Edge(
-                        from_b,
-                        error_beaker_name,
-                        label=f"errors: {error_types}",
-                        color="red",
+                if error_beaker_name not in excludes:
+                    pydg.add_edge(
+                        pydot.Edge(
+                            from_b,
+                            error_beaker_name,
+                            label=f"errors: {error_types}",
+                            color="red",
+                            samehead=error_beaker_name,
+                        )
                     )
-                )
         return pydg
