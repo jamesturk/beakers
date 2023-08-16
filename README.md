@@ -2,33 +2,30 @@
 
 beakers is an experimental lightweight declarative ETL framework for Python
 
-Right now this is an experiment to explore some ideas around ETL.
+It is still very much in flux with no correctness or stability guarantees. 
 
-It is still very experimental with no stability guarantees. 
-If you're interested in poking around, thoughts and feedback are welcome, please reach out before contributing code though as a lot is still in flux.
+No contributions yet please, but feel free to poke around/ask questions.
 
-## (Intended) Features
+## Features
 
-- [x] Declarative ETL graph comprised of Python functions & Pydantic models
-- [x] Developer-friendly CLI for running processes
-- [x] Synchronous mode for ease of debugging or simple pipelines
-- [x] Data checkpoints stored in local database for intermediate caching & resuming interrupted runs
-- [x] Asynchronous task execution
-- [ ] Support for multiple backends (sqlite, postgres, etc)
-- [x] Robust error handling, including retries
+- declarative ETL graph comprised of Python functions & Pydantic models
+- developer-friendly CLI for running processes
+- sync/async task execution
+- data checkpoints stored in local database for intermediate caching & resuming interrupted runs
+- robust error handling, including retries
 
 ## Guiding Principles
 
 * **Lightweight** - Writing a single python file should be enough to get started. It should be as easy to use as a script in that sense.
-* **Data-centric** - Looking at the definition should make it clear what data exists at what step. 
-* **Modern Python** - Take full advantage of recent additions to Python, including type hints, `asyncio`, and libraries like `pydantic`.
-* **Developer Experience** - The focus should be on the developer experience, a nice CLI, helpful error messages.
+* **Data-centric** - Know what data is added at each step.
+* **Modern Python** - Take full advantage of recent additions to Python, including type hints, `asyncio`, and libraries like `pydantic` and `rich`.
+* **Developer Experience** - Focused on the developer experience: a nice CLI, helpful error messages.
 
 ## Anti-Principles
 
 Unlike most tools in this space, this is not a complete "enterprise grade" ETL solution.
 
-It isn't a perfect analogy by any means but beakers strives to be to `luigi` what `flask` is to `Django`. 
+It isn't a perfect analogy by any means but it could be said `databeakers` is to `luigi` what `flask` is to `Django`.
 If you are building your entire business around ETL, it makes sense to invest in the infrastructure & tooling to make that work.
 Maybe structuring your code around beakers will make it easier to migrate to one of those tools than if you had written a bespoke script.
 Plus, beakers is Python, so you can always start by running it from within a bigger framework.
