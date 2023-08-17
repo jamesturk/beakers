@@ -41,6 +41,7 @@ def test_add_transform(wc_pipeline):
         error_map={},
         edge_type="transform",
         whole_record=False,
+        allow_filter=True,
     )
 
 
@@ -163,6 +164,7 @@ def test_graph_data_simple():
                     error_map={},
                     edge_type="transform",
                     whole_record=False,
+                    allow_filter=True,
                 ),
             }
         ],

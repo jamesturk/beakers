@@ -83,7 +83,12 @@ class Conditional:
 
     async def __call__(self, item: BaseModel) -> BaseModel:
         if self.condition(item):
-            log.debug("conditional", result=True, conditional=self)
+            log.info(
+                "conditional",
+                result=True,
+                conditional=self,
+                edge_func=callable_name(self.edge_func),
+            )
             result = self.edge_func(item)
             if inspect.isawaitable(result):
                 return await result

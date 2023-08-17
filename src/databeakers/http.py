@@ -69,4 +69,5 @@ def make_http_edge(
         },
         edge_type=EdgeType.transform,
         whole_record=whole_record,
+        allow_filter=False,
     )

@@ -27,6 +27,7 @@ class Edge(BaseModel):
     error_map: dict[tuple, str]
     edge_type: EdgeType
     whole_record: bool
+    allow_filter: bool
 
 
 class Seed(BaseModel):

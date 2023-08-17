@@ -14,7 +14,7 @@ from ._record import Record
 from ._models import Edge, EdgeType, RunMode, RunReport, Seed
 from ._utils import callable_name
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .exceptions import ItemNotFound, SeedError, InvalidGraph
+from .exceptions import ItemNotFound, SeedError, InvalidGraph, NoEdgeResult
 
 
 log = get_logger()
@@ -76,6 +76,7 @@ class Pipeline:
         edge_type: EdgeType = EdgeType.transform,
         error_map: dict[tuple, str] | None = None,
         whole_record: bool = False,
+        allow_filter: bool = True,
     ) -> None:
         if name is None:
             name = callable_name(func)
@@ -85,6 +86,7 @@ class Pipeline:
             func=func,
             error_map=error_map or {},
             whole_record=whole_record,
+            allow_filter=allow_filter,
         )
         self.add_edge(from_beaker, to_beaker, edge)
 
@@ -565,12 +567,19 @@ class Pipeline:
                         num_yielded=num_yielded,
                         to_beaker=to_beaker.name,
                     )
-                    to_beaker_name = to_beaker.name if num_yielded else "_none"
+                    if num_yielded:
+                        to_beaker_name = to_beaker.name
+                    elif edge.allow_filter:
+                        to_beaker_name = "_none"
+                    else:
+                        raise NoEdgeResult("generator yielded no items")
                 elif result is not None:
                     to_beaker.add_item(result, parent=id, id_=id)
                     to_beaker_name = to_beaker.name
-                else:
+                elif edge.allow_filter:
                     to_beaker_name = "_none"
+                else:
+                    raise NoEdgeResult("transform returned None")
             case EdgeType.conditional:
                 # conditional: add item to to_beaker if e_func returns truthy
                 if result:
@@ -625,7 +634,7 @@ class Pipeline:
                     only_beakers=only_beakers,
                 )
 
-        log.info(
+        log.debug(
             "river subtasks",
             cur_b=cur_b,
             subtasks=len(subtasks),
