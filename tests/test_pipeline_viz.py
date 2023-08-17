@@ -49,8 +49,9 @@ def test_graph_error_nodes():
     assert b"\terror\t[color=red," in dot
     assert b"\tzero_division\t[color=red," in dot
     # error lines
-    assert b"word -> error\t[color=red," in dot
-    assert b"word -> zero_division\t[color=red," in dot
+    print(dot)
+    assert b'"word -> capitalized" -> error\t[color=red,' in dot
+    assert b'"word -> capitalized" -> zero_division\t[color=red,' in dot
 
 
 def test_graph_splitter(splitter_pipeline):  # noqa

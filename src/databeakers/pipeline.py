@@ -378,7 +378,7 @@ class Pipeline:
         node_report: dict[str, int] = defaultdict(int)
 
         # get outbound edges
-        for to_b, edge in self._out_edges(node):
+        for edge in self._out_edges(node):
             from_beaker = self.beakers[node]
             all_upstream = self._all_upstream_ids(edge)
             already_processed = from_beaker.id_set() & all_upstream
@@ -527,8 +527,8 @@ class Pipeline:
         return e_result.dest
 
     def _out_edges(self, cur_b):
-        for from_b, to_b, e in self.graph.out_edges(cur_b, data=True):
-            yield to_b, e["edge"]
+        for _, _, e in self.graph.out_edges(cur_b, data=True):
+            yield e["edge"]
 
     async def _run_one_item_river(
         self, record: Record, cur_b: str, only_beakers: list[str] | None = None
@@ -544,7 +544,7 @@ class Pipeline:
         from_to = []
 
         # fan an item out to all downstream beakers
-        for to_b, edge in self._out_edges(cur_b):
+        for edge in self._out_edges(cur_b):
             # TODO: cache this upstream set?
             if record.id in self._all_upstream_ids(edge):
                 from_to.append((cur_b, "_already_processed"))
@@ -602,14 +602,20 @@ class Pipeline:
         for from_b, to_b, e in self.graph.edges(data=True):
             edge = e["edge"]
             if isinstance(edge, Transform):
-                pydg.add_edge(pydot.Edge(from_b, to_b, label=edge.name))
-                for error_types, error_beaker_name in edge.error_map.items():
+                edge_name = f"{from_b} -> {to_b}"
+                pydg.add_node(
+                    pydot.Node(
+                        edge_name, color="lightblue", shape="rect", label=edge.name
+                    )
+                )
+                pydg.add_edge(pydot.Edge(from_b, edge_name))
+                pydg.add_edge(pydot.Edge(edge_name, to_b))
+                for _, error_beaker_name in edge.error_map.items():
                     if error_beaker_name not in excludes:
                         pydg.add_edge(
                             pydot.Edge(
-                                from_b,
+                                edge_name,
                                 error_beaker_name,
-                                label=f"errors: {error_types}",
                                 color="red",
                                 samehead=error_beaker_name,
                             )
