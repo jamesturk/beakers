@@ -16,3 +16,7 @@ class ItemNotFound(DatabeakerError):
 
 class NoEdgeResult(DatabeakerError):
     """Raised when an edge unexpectedly does not return data."""
+
+
+class BadSplitResult(DatabeakerError):
+    """Raised when a split function returns an invalid mapping."""

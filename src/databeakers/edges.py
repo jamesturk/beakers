@@ -2,7 +2,7 @@ import inspect
 from typing import AsyncGenerator, Callable, Generator
 from pydantic import BaseModel
 from structlog import get_logger
-from databeakers.exceptions import NoEdgeResult
+from databeakers.exceptions import NoEdgeResult, BadSplitResult
 from databeakers._models import ErrorType
 from ._utils import callable_name
 from ._record import Record
@@ -120,7 +120,7 @@ class Splitter(Edge):
     def __init__(
         self,
         splitter_func: Callable,
-        splitter_map: dict[str, Callable],
+        splitter_map: dict[str, Transform],
         *,
         name: str | None = None,
         whole_record: bool = False,
@@ -129,3 +129,25 @@ class Splitter(Edge):
         self.splitter_func = splitter_func
         self.splitter_map = splitter_map
         self.name = name or callable_name(splitter_func)
+
+    async def _run(
+        self, id_: str, data: BaseModel | Record
+    ) -> AsyncGenerator[EdgeResult, None]:
+        try:
+            result = self.splitter_func(data)
+        except Exception as e:
+            log.critical(
+                "splitter function raised exception",
+                edge=self,
+                exception=str(e),
+                id=id_,
+                data=data,
+            )
+            raise
+
+        if result not in self.splitter_map:
+            raise BadSplitResult(
+                f"splitter result {result} not in splitter map {self.splitter_map}"
+            )
+        async for item in self.splitter_map[result]._run(id_, data):
+            yield item
