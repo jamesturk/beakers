@@ -7,25 +7,12 @@ from typing import Callable
 from pydantic import BaseModel, ConfigDict
 
 
-class EdgeType(Enum):
-    """
-    EdgeType affects how the edge function is processed.
-
-    transform: the output of the edge function is added to the to_beaker
-    conditional: if the output of the edge function is truthy, it is added to the to_beaker
-    """
-
-    transform = "transform"
-    conditional = "conditional"
-
-
 class Edge(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     name: str
     func: Callable
     error_map: dict[tuple, str]
-    edge_type: EdgeType
     whole_record: bool
     allow_filter: bool
 

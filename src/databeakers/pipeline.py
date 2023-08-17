@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from structlog import get_logger
 
 from ._record import Record
-from ._models import Edge, EdgeType, RunMode, RunReport, Seed
+from ._models import Edge, RunMode, RunReport, Seed
 from ._utils import callable_name
 from .beakers import Beaker, SqliteBeaker, TempBeaker
 from .exceptions import ItemNotFound, SeedError, InvalidGraph, NoEdgeResult
@@ -73,7 +73,6 @@ class Pipeline:
         func: Callable,
         *,
         name: str | None = None,
-        edge_type: EdgeType = EdgeType.transform,
         error_map: dict[tuple, str] | None = None,
         whole_record: bool = False,
         allow_filter: bool = True,
@@ -82,7 +81,6 @@ class Pipeline:
             name = callable_name(func)
         edge = Edge(
             name=name,
-            edge_type=edge_type,
             func=func,
             error_map=error_map or {},
             whole_record=whole_record,
@@ -98,7 +96,6 @@ class Pipeline:
         - edge.func must take a single parameter
         - edge.func parameter must be a subclass of from_beaker
         - edge.func must return to_beaker or None
-        - edge.func must return bool if edge_type is conditional
         - edge.error_map must be a dict of (exception,) -> beaker_name
         - edge.error_map beakers will be created if they don't exist
         """
@@ -162,7 +159,7 @@ class Pipeline:
                     func=edge.func,
                     name=edge.name,
                 )
-            elif edge.edge_type == EdgeType.transform:
+            else:
                 ret_ann = signature.return_annotation
                 if ret_ann.__name__ in ("Generator", "AsyncGenerator"):
                     ret_ann = ret_ann.__args__[0]
@@ -171,14 +168,6 @@ class Pipeline:
                         f"{edge.name} returns {signature.return_annotation.__name__}, "
                         f"{to_beaker} expects {to_model.__name__}"
                     )
-            elif (
-                edge.edge_type == EdgeType.conditional
-                and signature.return_annotation != bool
-            ):
-                raise InvalidGraph(
-                    f"{edge.name} returns {signature.return_annotation.__name__}, "
-                    "conditional edges must return bool"
-                )
 
         # check error beakers
         for err_b in edge.error_map.values():
@@ -505,14 +494,19 @@ class Pipeline:
         Returns: result_beaker_name
         """
         try:
+            data: BaseModel | Record | None = None
             if edge.whole_record:
-                if record is None:
-                    record = self._get_full_record(id)
-                result = edge.func(record)
+                # data = self._get_full_record(id) if record is None else record
+                # result = edge.func(data)
+                data = record if record is not None else self._get_full_record(id)
+                record = data
+                result = edge.func(data)
             else:
-                if item is None and record:
-                    item = record[cur_b]
-                result = edge.func(item)
+                data = item
+                if data is None and record:
+                    data = record[cur_b]
+                item = data
+                result = edge.func(data)
             if inspect.isawaitable(result):
                 result = await result
             if record:
@@ -522,7 +516,7 @@ class Pipeline:
                 exception=repr(e),
                 edge=edge,
                 id=id,
-                item=item,
+                data=data,
             )
             for (
                 error_types,
@@ -533,7 +527,7 @@ class Pipeline:
                     error_beaker = self.beakers[error_beaker_name]
                     error_beaker.add_item(
                         ErrorType(
-                            item=item,
+                            item=data,
                             exception=str(e),
                             exc_type=str(type(e)),
                         ),
@@ -547,48 +541,38 @@ class Pipeline:
                 raise
 
         # propagate result to downstream beakers
-        match edge.edge_type:
-            case EdgeType.transform:
-                # transform: add result to to_beaker (if not None)
-                if isinstance(result, (Generator, AsyncGenerator)):
-                    num_yielded = 0
-                    if isinstance(result, Generator):
-                        for i in result:
-                            to_beaker.add_item(i, parent=id, id_=None)
-                            num_yielded += 1
-                    else:
-                        async for i in result:
-                            to_beaker.add_item(i, parent=id, id_=None)
-                            num_yielded += 1
-                    log.info(
-                        "generator yielded",
-                        edge=edge,
-                        id=id,
-                        num_yielded=num_yielded,
-                        to_beaker=to_beaker.name,
-                    )
-                    if num_yielded:
-                        to_beaker_name = to_beaker.name
-                    elif edge.allow_filter:
-                        to_beaker_name = "_none"
-                    else:
-                        raise NoEdgeResult("generator yielded no items")
-                elif result is not None:
-                    to_beaker.add_item(result, parent=id, id_=id)
-                    to_beaker_name = to_beaker.name
-                elif edge.allow_filter:
-                    to_beaker_name = "_none"
-                else:
-                    raise NoEdgeResult("transform returned None")
-            case EdgeType.conditional:
-                # conditional: add item to to_beaker if e_func returns truthy
-                if result:
-                    to_beaker.add_item(item, parent=id, id_=id)
-                    to_beaker_name = to_beaker.name
-                else:
-                    to_beaker_name = "_none"
-            case _:  # pragma: no cover
-                raise ValueError(f"Unknown edge type {edge.edge_type}")
+        # TODO: this dispatch should be inside classes?
+        # transform: add result to to_beaker (if not None)
+        if isinstance(result, (Generator, AsyncGenerator)):
+            num_yielded = 0
+            if isinstance(result, Generator):
+                for i in result:
+                    to_beaker.add_item(i, parent=id, id_=None)
+                    num_yielded += 1
+            else:
+                async for i in result:
+                    to_beaker.add_item(i, parent=id, id_=None)
+                    num_yielded += 1
+            log.info(
+                "generator yielded",
+                edge=edge,
+                id=id,
+                num_yielded=num_yielded,
+                to_beaker=to_beaker.name,
+            )
+            if num_yielded:
+                to_beaker_name = to_beaker.name
+            elif edge.allow_filter:
+                to_beaker_name = "_none"
+            else:
+                raise NoEdgeResult("generator yielded no items")
+        elif result is not None:
+            to_beaker.add_item(result, parent=id, id_=id)
+            to_beaker_name = to_beaker.name
+        elif edge.allow_filter:
+            to_beaker_name = "_none"
+        else:
+            raise NoEdgeResult("transform returned None")
         return to_beaker_name
 
     async def _run_one_item_river(

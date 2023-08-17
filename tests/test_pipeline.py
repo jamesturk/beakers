@@ -3,7 +3,7 @@ import pytest
 import itertools
 from databeakers.pipeline import Pipeline, ErrorType
 from databeakers.exceptions import InvalidGraph
-from databeakers._models import Edge, RunMode, EdgeType
+from databeakers._models import Edge, RunMode
 from examples import Word, Sentence, fruits
 
 
@@ -39,7 +39,6 @@ def test_add_transform(wc_pipeline):
         name="capitalized",
         func=capitalized,
         error_map={},
-        edge_type="transform",
         whole_record=False,
         allow_filter=True,
     )
@@ -106,17 +105,6 @@ def test_add_transform_no_implicit_return_beaker():
         pipeline.add_transform("word", "capitalized", lambda x: x.upper())
 
 
-def test_add_transform_bad_annotation_conditional(wc_pipeline):
-    def non_bool(x: Word) -> str:
-        return x
-
-    with pytest.raises(InvalidGraph) as e:
-        wc_pipeline.add_transform(
-            "word", "capitalized", non_bool, edge_type=EdgeType.conditional
-        )
-    assert "returns str, conditional edges must return bool" in str(e)
-
-
 def test_add_transform_bad_error_beaker_type(wc_pipeline):
     wc_pipeline.add_beaker("error", Word)
     with pytest.raises(InvalidGraph) as e:
@@ -162,7 +150,6 @@ def test_graph_data_simple():
                     name="capitalized",
                     func=capitalized,
                     error_map={},
-                    edge_type="transform",
                     whole_record=False,
                     allow_filter=True,
                 ),
