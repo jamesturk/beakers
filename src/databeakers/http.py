@@ -11,7 +11,7 @@ class HttpResponse(BaseModel):
 
     url: str
     status_code: int
-    response_body: str
+    text: str
     retrieved_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
 
@@ -43,7 +43,7 @@ class HttpRequest:
         return HttpResponse(
             url=url,
             status_code=response.status_code,
-            response_body=response.text,
+            text=response.text,
         )
 
 
