@@ -5,7 +5,7 @@ import datetime
 import networkx  # type: ignore
 import pydot
 from collections import defaultdict
-from typing import Iterable, Callable, Type
+from typing import Iterable, Callable, Type, Generator
 from types import UnionType
 from pydantic import BaseModel
 from structlog import get_logger
@@ -55,7 +55,7 @@ class Pipeline:
         datatype: Type[BaseModel],
         beaker_type: Type[Beaker] = SqliteBeaker,
     ) -> Beaker:
-        self.graph.add_node(name, datatype=datatype)
+        self.graph.add_node(name, datatype=datatype, node_type="beaker")
         self.beakers[name] = beaker_type(name, datatype, self)
         return self.beakers[name]
 
@@ -187,9 +187,11 @@ class Pipeline:
         )
 
     def add_splitter(self, from_beaker: str, splitter: Splitter) -> None:
+        self.graph.add_node(splitter.name, node_type="split")
+        self.graph.add_edge(from_beaker, splitter.name, edge=splitter)
         for out in splitter.splitter_map.values():
             self.graph.add_edge(
-                from_beaker,
+                splitter.name,
                 out.to_beaker,
                 edge=splitter,
             )
@@ -272,6 +274,8 @@ class Pipeline:
         nodes = {}
 
         for node in networkx.topological_sort(self.graph):
+            if self.graph.nodes[node]["node_type"] == "split":
+                continue
             beaker = self.beakers[node]
 
             nodes[node] = {
@@ -324,12 +328,21 @@ class Pipeline:
         else:
             raise ValueError(f"Unknown run mode {run_mode}")  # pragma: no cover
 
+    def _beakers_toposort(
+        self, only_beakers: list[str] | None
+    ) -> Generator[str, None, None]:
+        for node in networkx.topological_sort(self.graph):
+            if self.graph.nodes[node]["node_type"] == "split":
+                continue
+            elif only_beakers and node not in only_beakers:
+                continue
+            else:
+                yield node
+
     def _run_waterfall(
         self, only_beakers: list[str] | None, report: RunReport
     ) -> RunReport:
-        for node in networkx.topological_sort(self.graph):
-            if only_beakers and node not in only_beakers:
-                continue
+        for node in self._beakers_toposort(only_beakers):
             # push data from this node to downstream nodes
             report.nodes[node] = self._run_node_waterfall(node)
 
@@ -350,10 +363,10 @@ class Pipeline:
                 pass
         return rec
 
-    def _all_upstream(self, to_beaker: Beaker, edge: Edge):
-        all_upstream = to_beaker.parent_id_set()
+    def _all_upstream_ids(self, edge: Edge):
+        all_upstream = set()
         for error_b in edge.out_beakers():
-            all_upstream |= self.beakers[error_b].id_set()
+            all_upstream |= self.beakers[error_b].parent_id_set()
         return all_upstream
 
     def _run_node_waterfall(self, node: str) -> dict[str, int]:
@@ -365,27 +378,21 @@ class Pipeline:
         node_report: dict[str, int] = defaultdict(int)
 
         # get outbound edges
-        edges = self.graph.out_edges(node, data=True)
-        for from_b, to_b, e in edges:
-            from_beaker = self.beakers[from_b]
-            to_beaker = self.beakers[to_b]
-            edge = e["edge"]
-            all_upstream = self._all_upstream(to_beaker, edge)
+        for to_b, edge in self._out_edges(node):
+            from_beaker = self.beakers[node]
+            all_upstream = self._all_upstream_ids(edge)
             already_processed = from_beaker.id_set() & all_upstream
             node_report["_already_processed"] += len(already_processed)
 
             log.info(
                 "processing edge",
                 from_b=from_beaker.name,
-                to_b=to_beaker.name,
                 edge=edge.name,
                 to_process=len(from_beaker) - len(already_processed),
                 already_processed=len(already_processed),
             )
             partial_result = loop.run_until_complete(
-                self._run_edge_waterfall(
-                    from_beaker, to_beaker, edge, already_processed
-                )
+                self._run_edge_waterfall(from_beaker, edge, already_processed)
             )
             for k, v in partial_result.items():
                 node_report[k] += v
@@ -395,7 +402,6 @@ class Pipeline:
     async def _run_edge_waterfall(
         self,
         from_beaker: Beaker,
-        to_beaker: Beaker,
         edge: Edge,
         already_processed: set[str],
     ) -> dict[str, int]:
@@ -424,7 +430,7 @@ class Pipeline:
                     # transaction around each waterfall step
                     with self.db:
                         result_loc = await self._run_edge_func(
-                            from_beaker.name, edge, to_beaker, id, item=item
+                            from_beaker.name, edge, id, item=item
                         )
                     node_report[result_loc] += 1
                 except Exception:
@@ -461,10 +467,7 @@ class Pipeline:
         loop = asyncio.new_event_loop()
 
         # start beaker is the first beaker in the topological sort that's in only_beakers
-        topo_order = list(networkx.topological_sort(self.graph))
-        if only_beakers:
-            topo_order = [b for b in topo_order if b in only_beakers]
-        start_b = topo_order[0]
+        start_b = list(self._beakers_toposort(only_beakers))[0]
         log.debug("starting river run", start_beaker=start_b, only_beakers=only_beakers)
 
         start_beaker = self.beakers[start_b]
@@ -486,7 +489,6 @@ class Pipeline:
         self,
         cur_b: str,
         edge: Edge,
-        to_beaker: Beaker,
         id: str,
         *,
         item: BaseModel | None = None,
@@ -521,8 +523,12 @@ class Pipeline:
                 beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
 
         if record:
-            record[to_beaker.name] = e_result.data
+            record[e_result.dest] = e_result.data
         return e_result.dest
+
+    def _out_edges(self, cur_b):
+        for from_b, to_b, e in self.graph.out_edges(cur_b, data=True):
+            yield to_b, e["edge"]
 
     async def _run_one_item_river(
         self, record: Record, cur_b: str, only_beakers: list[str] | None = None
@@ -538,18 +544,15 @@ class Pipeline:
         from_to = []
 
         # fan an item out to all downstream beakers
-        for _, to_b, e in self.graph.out_edges(cur_b, data=True):
-            edge = e["edge"]
-            to_beaker = self.beakers[to_b]
-
+        for to_b, edge in self._out_edges(cur_b):
             # TODO: cache this upstream set?
-            if record.id in self._all_upstream(to_beaker, edge):
+            if record.id in self._all_upstream_ids(edge):
                 from_to.append((cur_b, "_already_processed"))
                 # already processed this item, nothing to do
                 continue
 
             result_beaker = await self._run_edge_func(
-                cur_b, edge, to_beaker, record.id, record=record
+                cur_b, edge, record.id, record=record
             )
             from_to.append((cur_b, result_beaker))
             if only_beakers and result_beaker not in only_beakers:
@@ -596,12 +599,8 @@ class Pipeline:
             else:
                 pydg.add_node(pydot.Node(b.name, color="blue"))
 
-        seen = set()
         for from_b, to_b, e in self.graph.edges(data=True):
             edge = e["edge"]
-            if edge.name in seen:
-                continue
-            seen.add(edge.name)
             if isinstance(edge, Transform):
                 pydg.add_edge(pydot.Edge(from_b, to_b, label=edge.name))
                 for error_types, error_beaker_name in edge.error_map.items():
@@ -617,7 +616,5 @@ class Pipeline:
                         )
             elif isinstance(edge, Splitter):
                 pydg.add_node(pydot.Node(edge.name, color="green", shape="diamond"))
-                pydg.add_edge(pydot.Edge(from_b, edge.name))
-                for beaker in edge.out_beakers():
-                    pydg.add_edge(pydot.Edge(edge.name, beaker))
+                pydg.add_edge(pydot.Edge(from_b, to_b))
         return pydg
