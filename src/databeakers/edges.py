@@ -15,7 +15,6 @@ class Edge(BaseModel):
 
 
 class Destination:
-    forward = "_forward"
     stop = "_stop"
 
 
@@ -27,6 +26,7 @@ class EdgeResult(BaseModel):
 
 class Transform(Edge):
     func: Callable
+    to_beaker: str
     error_map: dict[tuple, str]
     name: str | None = None
     allow_filter: bool = False
@@ -34,6 +34,7 @@ class Transform(Edge):
     def __init__(
         self,
         func: Callable,
+        to_beaker: str,
         *,
         name: str | None = None,
         error_map: dict[tuple, str] | None = None,
@@ -41,7 +42,10 @@ class Transform(Edge):
         allow_filter: bool = False,
     ):
         super().__init__(
-            func=func, whole_record=whole_record, error_map=error_map or {}
+            func=func,
+            whole_record=whole_record,
+            to_beaker=to_beaker,
+            error_map=error_map or {},
         )
         self.name = name or callable_name(func)
         self.func = func
@@ -85,15 +89,11 @@ class Transform(Edge):
             num_yielded = 0
             if isinstance(result, Generator):
                 for item in result:
-                    yield EdgeResult(
-                        dest=Destination.forward, data=item, id_=None
-                    )  # new id
+                    yield EdgeResult(dest=self.to_beaker, data=item, id_=None)  # new id
                     num_yielded += 1
             else:
                 async for item in result:
-                    yield EdgeResult(
-                        dest=Destination.forward, data=item, id_=None
-                    )  # new id
+                    yield EdgeResult(dest=self.to_beaker, data=item, id_=None)  # new id
                     num_yielded += 1
             log.info(
                 "generator yielded",
@@ -108,7 +108,7 @@ class Transform(Edge):
                     raise NoEdgeResult("edge generator yielded no items")
         elif result is not None:
             # standard case -> forward result
-            yield EdgeResult(dest=Destination.forward, data=result, id_=id_)
+            yield EdgeResult(dest=self.to_beaker, data=result, id_=id_)
         elif self.allow_filter:
             # if nothing is returned, and filterin is allowed, remove from stream
             yield EdgeResult(dest=Destination.stop, data=None, id_=id_)

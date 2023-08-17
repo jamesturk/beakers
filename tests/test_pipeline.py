@@ -39,6 +39,7 @@ def test_add_transform(wc_pipeline):
     assert wc_pipeline.graph["word"]["capitalized"]["edge"] == Transform(
         name="capitalized",
         func=capitalized,
+        to_beaker="capitalized",
         error_map={},
         whole_record=False,
         allow_filter=True,
@@ -149,6 +150,7 @@ def test_graph_data_simple():
                 "to_beaker": "capitalized",
                 "edge": Transform(
                     name="capitalized",
+                    to_beaker="capitalized",
                     func=capitalized,
                     error_map={},
                     whole_record=False,

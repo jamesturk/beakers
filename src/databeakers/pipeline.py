@@ -73,13 +73,14 @@ class Pipeline:
         edge = Transform(
             name=name,
             func=func,
+            to_beaker=to_beaker,
             error_map=error_map or {},
             whole_record=whole_record,
             allow_filter=allow_filter,
         )
-        self.add_edge(from_beaker, to_beaker, edge)
+        self.add_edge(from_beaker, edge)
 
-    def add_edge(self, from_beaker: str, to_beaker: str, edge: Edge) -> None:
+    def add_edge(self, from_beaker: str, edge: Edge) -> None:
         """
         Declaration Rules:
         - from_beaker must exist
@@ -131,19 +132,20 @@ class Pipeline:
             )
 
         # check to/return type
-        if to_beaker not in self.beakers:
+        if edge.to_beaker not in self.beakers:
             if signature.return_annotation == inspect.Signature.empty:
                 raise InvalidGraph(
-                    f"{to_beaker} not found & no return annotation on edge function to infer type"
+                    f"{edge.to_beaker} not found & no return annotation on edge function to "
+                    "infer type"
                 )
             else:
                 to_model = signature.return_annotation
-                self.add_beaker(to_beaker, to_model)
+                self.add_beaker(edge.to_beaker, to_model)
                 log.debug(
-                    "implicit beaker", beaker=to_beaker, datatype=to_model.__name__
+                    "implicit beaker", beaker=edge.to_beaker, datatype=to_model.__name__
                 )
         else:
-            to_model = self.beakers[to_beaker].model
+            to_model = self.beakers[edge.to_beaker].model
             if signature.return_annotation == inspect.Signature.empty:
                 log.warning(
                     "no return annotation on edge function",
@@ -163,7 +165,7 @@ class Pipeline:
                     if not issubclass(to_model, rt):
                         raise InvalidGraph(
                             f"{edge.name} returns {rt.__name__}, "
-                            f"{to_beaker} expects {to_model.__name__}"
+                            f"{edge.to_beaker} expects {to_model.__name__}"
                         )
 
         # check error beakers
@@ -179,7 +181,7 @@ class Pipeline:
 
         self.graph.add_edge(
             from_beaker,
-            to_beaker,
+            edge.to_beaker,
             edge=edge,
         )
 
@@ -502,12 +504,8 @@ class Pipeline:
                 data = record[cur_b]
 
         # run the edge function & push results to dest beakers
-        n_results = 0
         async for e_result in edge._run(id, data):
-            n_results += 1
-            if e_result.dest == Destination.forward:
-                to_beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
-            elif e_result.dest == Destination.stop:
+            if e_result.dest == Destination.stop:
                 return Destination.stop
             else:
                 beaker = self.beakers[e_result.dest]
@@ -515,10 +513,7 @@ class Pipeline:
 
         if record:
             record[to_beaker.name] = e_result.data
-        if e_result.dest == Destination.forward:
-            return to_beaker.name
-        else:
-            return e_result.dest
+        return e_result.dest
 
     async def _run_one_item_river(
         self, record: Record, cur_b: str, only_beakers: list[str] | None = None

@@ -49,6 +49,7 @@ class HttpRequest:
 
 def make_http_edge(
     name,
+    to_beaker: str,
     *,
     whole_record: bool = False,
     # HttpRequest args
@@ -60,6 +61,7 @@ def make_http_edge(
 ) -> Transform:
     return Transform(
         name=name,
+        to_beaker=to_beaker,
         func=HttpRequest(
             field=field, follow_redirects=follow_redirects, retries=retries
         ),
