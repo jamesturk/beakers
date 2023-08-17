@@ -1,6 +1,7 @@
 import importlib
 import time
 import datetime
+import json
 import typer
 import sys
 import re
@@ -284,6 +285,32 @@ def peek(
     else:
         typer.secho(f"Unknown entity: {thing}", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+
+@app.command()
+def export(
+    ctx: typer.Context,
+    format: str = typer.Option("json", "--format", "-f"),
+    #    fields: Optional[List[str]] = typer.Option(None, "--fields", "-F"),
+) -> None:
+    """
+    Export data from beakers.
+    """
+    main_beaker = "scrapeghost_response"
+    aux_beakers = ["agency"]
+    beaker = ctx.obj.beakers["scrapeghost_response"]
+
+    output = []
+    for id_ in beaker.id_set():
+        record = ctx.obj._get_full_record(id_)
+        as_dict = dict(record[main_beaker])
+        for aux_beaker in aux_beakers:
+            for k, v in dict(record[aux_beaker]).items():
+                as_dict[f"{aux_beaker}_{k}"] = v
+        output.append(as_dict)
+
+    if format == "json":
+        print(json.dumps(output, indent=2))
 
 
 if __name__ == "__main__":  # pragma: no cover
