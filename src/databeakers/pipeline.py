@@ -13,7 +13,7 @@ from structlog import get_logger
 from ._record import Record
 from ._models import RunMode, RunReport, Seed, ErrorType
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .edges import Transform, Edge, Destination
+from .edges import Transform, Edge, Destination, Splitter
 from .exceptions import ItemNotFound, SeedError, InvalidGraph
 
 
@@ -78,9 +78,9 @@ class Pipeline:
             whole_record=whole_record,
             allow_filter=allow_filter,
         )
-        self.add_edge(from_beaker, edge)
+        self.add_out_transform(from_beaker, edge)
 
-    def add_edge(self, from_beaker: str, edge: Edge) -> None:
+    def add_out_transform(self, from_beaker: str, edge: Edge) -> None:
         """
         Declaration Rules:
         - from_beaker must exist
@@ -96,6 +96,7 @@ class Pipeline:
         if from_beaker not in self.beakers:
             raise InvalidGraph(f"{from_beaker} not found")
         from_model = self.beakers[from_beaker].model
+
         signature = inspect.signature(edge.func)
         param_annotations = [p.annotation for p in signature.parameters.values()]
         if len(param_annotations) != 1:
@@ -184,6 +185,14 @@ class Pipeline:
             edge.to_beaker,
             edge=edge,
         )
+
+    def add_splitter(self, from_beaker: str, splitter: Splitter) -> None:
+        for out in splitter.splitter_map.values():
+            self.graph.add_edge(
+                from_beaker,
+                out.to_beaker,
+                edge=splitter,
+            )
 
     # section: seeds ##########################################################
 
@@ -343,7 +352,7 @@ class Pipeline:
 
     def _all_upstream(self, to_beaker: Beaker, edge: Edge):
         all_upstream = to_beaker.parent_id_set()
-        for error_b in edge.error_map.values():
+        for error_b in edge.out_beakers():
             all_upstream |= self.beakers[error_b].id_set()
         return all_upstream
 

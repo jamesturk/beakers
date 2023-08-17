@@ -115,19 +115,28 @@ class Transform(Edge):
         else:
             raise NoEdgeResult("transform returned None")
 
+    def out_beakers(self) -> set[str]:
+        return {self.to_beaker} | set(self.error_map.values())
+
 
 class Splitter(Edge):
+    splitter_func: Callable
+    splitter_map: dict[str, Transform]
+    name: str | None = None
+
     def __init__(
         self,
+        *,
         splitter_func: Callable,
         splitter_map: dict[str, Transform],
-        *,
         name: str | None = None,
         whole_record: bool = False,
     ):
-        super().__init__(whole_record=whole_record)
-        self.splitter_func = splitter_func
-        self.splitter_map = splitter_map
+        super().__init__(
+            whole_record=whole_record,
+            splitter_func=splitter_func,
+            splitter_map=splitter_map,
+        )
         self.name = name or callable_name(splitter_func)
 
     async def _run(
@@ -151,3 +160,9 @@ class Splitter(Edge):
             )
         async for item in self.splitter_map[result]._run(id_, data):
             yield item
+
+    def out_beakers(self) -> set[str]:
+        out = set()
+        for transform in self.splitter_map.values():
+            out.update(transform.out_beakers())
+        return out

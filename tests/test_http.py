@@ -38,7 +38,7 @@ def test_make_http_edge():
     pipeline = Pipeline("http", ":memory:")
     pipeline.add_beaker("start", URL)
     pipeline.add_beaker("response", HttpResponse)
-    pipeline.add_edge("start", make_http_edge("http", "response"))
+    pipeline.add_out_transform("start", make_http_edge("http", "response"))
     # ensure that default error beakers were added
     assert "http_timeout" in pipeline.beakers
     assert "http_error" in pipeline.beakers
