@@ -296,7 +296,6 @@ class Pipeline:
             run_mode=run_mode,
             nodes={},
         )
-        log.info("run", pipeline=self)
 
         # go through each node in forward order
         if run_mode == RunMode.waterfall:

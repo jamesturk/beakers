@@ -56,6 +56,8 @@ class Transform(Edge):
     ) -> AsyncGenerator[EdgeResult, None]:
         try:
             result = self.func(data)
+            if inspect.isawaitable(result):
+                result = await result
         except Exception as e:
             lg = log.bind(
                 exception=repr(e),
@@ -81,9 +83,6 @@ class Transform(Edge):
                 # no error handler, re-raise
                 log.critical("unhandled error", exception=str(e))
                 raise
-
-        if inspect.isawaitable(result):
-            result = await result
 
         if isinstance(result, (Generator, AsyncGenerator)):
             num_yielded = 0
