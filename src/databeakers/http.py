@@ -1,7 +1,7 @@
 import httpx
 from pydantic import BaseModel, Field
 import datetime
-from ._models import Edge
+from .edges import Transform
 
 
 class HttpResponse(BaseModel):
@@ -57,8 +57,8 @@ def make_http_edge(
     retries: int = 0,
     error_beaker: str = "http_error",
     timeout_beaker: str = "http_timeout",
-) -> Edge:
-    return Edge(
+) -> Transform:
+    return Transform(
         name=name,
         func=HttpRequest(
             field=field, follow_redirects=follow_redirects, retries=retries

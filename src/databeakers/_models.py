@@ -3,18 +3,7 @@ Internal pydantic models.
 """
 import datetime
 from enum import Enum
-from typing import Callable
-from pydantic import BaseModel, ConfigDict
-
-
-class Edge(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    name: str
-    func: Callable
-    error_map: dict[tuple, str]
-    whole_record: bool
-    allow_filter: bool
+from pydantic import BaseModel
 
 
 class Seed(BaseModel):
@@ -49,3 +38,10 @@ class RunReport(BaseModel):
     only_beakers: list[str] = []
     run_mode: RunMode
     nodes: dict[str, dict[str, int]] = {}
+
+
+# not in models because it is used externally
+class ErrorType(BaseModel):
+    item: BaseModel
+    exception: str
+    exc_type: str

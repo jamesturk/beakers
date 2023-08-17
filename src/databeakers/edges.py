@@ -4,19 +4,15 @@ from enum import Enum
 from pydantic import BaseModel
 from structlog import get_logger
 from databeakers.exceptions import NoEdgeResult
-from databeakers.pipeline import ErrorType
+from databeakers._models import ErrorType
 from ._utils import callable_name
 from ._record import Record
 
 log = get_logger()
 
 
-class Edge:
-    def __init__(
-        self,
-        whole_record: bool = False,
-    ):
-        self.whole_record = whole_record
+class Edge(BaseModel):
+    whole_record: bool = False
 
 
 class SpecialForward(Enum):
@@ -31,6 +27,11 @@ class ForwardResult(BaseModel):
 
 
 class Transform(Edge):
+    func: Callable
+    error_map: dict[tuple, str]
+    name: str | None = None
+    allow_filter: bool = False
+
     def __init__(
         self,
         func: Callable,
@@ -41,11 +42,10 @@ class Transform(Edge):
         allow_filter: bool = False,
     ):
         super().__init__(
-            whole_record=whole_record,
+            func=func, whole_record=whole_record, error_map=error_map or {}
         )
-        self.func = func
         self.name = name or callable_name(func)
-        self.error_map = error_map or {}
+        self.func = func
         self.allow_filter = allow_filter
 
     async def _run(self, id_: str, data: BaseModel | Record) -> BaseModel:

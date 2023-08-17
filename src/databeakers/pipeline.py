@@ -7,24 +7,18 @@ import pydot
 from collections import defaultdict
 from collections.abc import Generator, AsyncGenerator
 from typing import Iterable, Callable, Type
+from types import UnionType
 from pydantic import BaseModel
 from structlog import get_logger
 
 from ._record import Record
-from ._models import Edge, RunMode, RunReport, Seed
-from ._utils import callable_name
+from ._models import RunMode, RunReport, Seed, ErrorType
 from .beakers import Beaker, SqliteBeaker, TempBeaker
+from .edges import Transform, Edge
 from .exceptions import ItemNotFound, SeedError, InvalidGraph, NoEdgeResult
 
 
 log = get_logger()
-
-
-# not in models because it is used externally
-class ErrorType(BaseModel):
-    item: BaseModel
-    exception: str
-    exc_type: str
 
 
 class Pipeline:
@@ -77,9 +71,7 @@ class Pipeline:
         whole_record: bool = False,
         allow_filter: bool = True,
     ) -> None:
-        if name is None:
-            name = callable_name(func)
-        edge = Edge(
+        edge = Transform(
             name=name,
             func=func,
             error_map=error_map or {},
@@ -161,13 +153,19 @@ class Pipeline:
                 )
             else:
                 ret_ann = signature.return_annotation
-                if ret_ann.__name__ in ("Generator", "AsyncGenerator"):
-                    ret_ann = ret_ann.__args__[0]
-                if not issubclass(to_model, ret_ann):
-                    raise InvalidGraph(
-                        f"{edge.name} returns {signature.return_annotation.__name__}, "
-                        f"{to_beaker} expects {to_model.__name__}"
-                    )
+                # check if union type
+                if type(ret_ann) == UnionType:
+                    return_types = [rt for rt in ret_ann.__args__ if rt != type(None)]
+                elif ret_ann.__name__ in ("Generator", "AsyncGenerator"):
+                    return_types = [ret_ann.__args__[0]]
+                else:
+                    return_types = [ret_ann]
+                for rt in return_types:
+                    if not issubclass(to_model, rt):
+                        raise InvalidGraph(
+                            f"{edge.name} returns {rt.__name__}, "
+                            f"{to_beaker} expects {to_model.__name__}"
+                        )
 
         # check error beakers
         for err_b in edge.error_map.values():

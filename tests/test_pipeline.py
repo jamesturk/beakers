@@ -3,7 +3,8 @@ import pytest
 import itertools
 from databeakers.pipeline import Pipeline, ErrorType
 from databeakers.exceptions import InvalidGraph
-from databeakers._models import Edge, RunMode
+from databeakers.edges import Transform
+from databeakers._models import RunMode
 from examples import Word, Sentence, fruits
 
 
@@ -35,7 +36,7 @@ def test_add_beaker_simple() -> None:
 
 def test_add_transform(wc_pipeline):
     wc_pipeline.add_transform("word", "capitalized", capitalized)
-    assert wc_pipeline.graph["word"]["capitalized"]["edge"] == Edge(
+    assert wc_pipeline.graph["word"]["capitalized"]["edge"] == Transform(
         name="capitalized",
         func=capitalized,
         error_map={},
@@ -146,7 +147,7 @@ def test_graph_data_simple():
         "edges": [
             {
                 "to_beaker": "capitalized",
-                "edge": Edge(
+                "edge": Transform(
                     name="capitalized",
                     func=capitalized,
                     error_map={},
