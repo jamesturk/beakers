@@ -16,6 +16,8 @@ from ._models import RunMode
 from .exceptions import SeedError, InvalidGraph
 from .config import load_config
 from .pipeline import Pipeline
+from .beakers import TempBeaker
+from .edges import Transform
 
 # TODO: allow re-enabling locals (but is very slow/noisy w/ big text)
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -63,45 +65,47 @@ def show(
     """
     Show the current state of the pipeline.
     """
-    pipeline = ctx.obj
 
     def _make_table() -> Table:
-        graph_data = pipeline.graph_data()
         empty_count = 0
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Node")
         table.add_column("Items", justify="right")
         table.add_column("Edges")
-        for node in graph_data:
-            if not empty and not node["len"]:
+        for node in sorted(ctx.obj._beakers_toposort(None)):
+            beaker = ctx.obj.beakers[node]
+            length = len(beaker)
+            if not length and not empty:
                 empty_count += 1
                 continue
             node_style = "dim italic"
-            if not node["temp"]:
-                node_style = "green" if node["len"] else "green dim"
+            temp = True
+            if not isinstance(beaker, TempBeaker):
+                node_style = "green" if length else "green dim"
+                temp = False
             edge_string = Text()
             first = True
-            for edge in node["edges"]:
+            for _, _, e in ctx.obj.graph.out_edges(node, data=True):
                 if not first:
                     edge_string.append("\n")
                 first = False
-                edge_string.append(
-                    f"{edge['edge'].name} -> ",
-                    style="cyan",
-                )
-                edge_string.append(
-                    f"{edge['to_beaker']}",
-                    style="green",
-                )
-                if edge["edge"].error_map:
-                    for exceptions, to_beaker in edge["edge"].error_map.items():
+
+                edge = e["edge"]
+
+                if isinstance(edge, Transform):
+                    edge_string.append(f"{edge.name} -> {edge.to_beaker}", style="cyan")
+                    for exceptions, to_beaker in edge.error_map.items():
                         edge_string.append(
                             f"\n   {' '.join(e.__name__ for e in exceptions)} -> {to_beaker}",
                             style="yellow",
                         )
+                else:
+                    edge_string.append(f"{edge.name}", style="cyan")
+                    for edge in edge.splitter_map.values():
+                        edge_string.append(f"\n   -> {edge.to_beaker}", style="green")
             table.add_row(
-                Text(f"{node['name']}", style=node_style),
-                "-" if node["temp"] else str(node["len"]),
+                Text(f"{node}", style=node_style),
+                "-" if temp else str(length),
                 edge_string,
             )
 

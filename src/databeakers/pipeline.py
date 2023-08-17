@@ -270,28 +270,6 @@ class Pipeline:
                     reset_list.append(f"{beaker.name} ({bl})")
         return reset_list
 
-    def graph_data(self) -> list[dict]:
-        nodes = {}
-
-        for node in networkx.topological_sort(self.graph):
-            if self.graph.nodes[node]["node_type"] == "split":
-                continue
-            beaker = self.beakers[node]
-
-            nodes[node] = {
-                "name": node,
-                "temp": isinstance(beaker, TempBeaker),
-                "len": len(beaker),
-                "edges": [],
-            }
-
-            for _, to_b, edge in self.graph.out_edges(node, data=True):
-                edge["to_beaker"] = to_b
-                nodes[node]["edges"].append(edge)
-
-        # all data collected for display
-        return sorted(nodes.values(), key=lambda x: x["name"])
-
     # section: running ########################################################
 
     def run(

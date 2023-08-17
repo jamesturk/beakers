@@ -119,48 +119,6 @@ def test_add_transform_bad_error_beaker_type(wc_pipeline):
     assert "Error beaker 'error' must use beakers.pipeline.ErrorType" in str(e)
 
 
-def test_graph_data_simple():
-    r = Pipeline("test")
-    r.add_beaker("word", Word)
-    r.add_beaker("capitalized", Word)
-    r.add_beaker("filtered", Word)
-    r.add_transform("word", "capitalized", capitalized)
-    r.add_transform(
-        "capitalized", "filtered", lambda x: x if x.word.startswith("A") else None
-    )
-    gd = r.graph_data()
-    assert len(gd) == 3
-    assert gd[0]["len"] == 0
-    assert gd[0]["name"] == "capitalized"
-    assert gd[0]["temp"] is False
-    assert gd[0]["edges"][0]["to_beaker"] == "filtered"
-    assert gd[0]["edges"][0]["edge"].name == "λ"
-    assert gd[1] == {
-        "len": 0,
-        "name": "filtered",
-        "temp": False,
-        "edges": [],
-    }
-    assert gd[2] == {
-        "len": 0,
-        "name": "word",
-        "temp": False,
-        "edges": [
-            {
-                "to_beaker": "capitalized",
-                "edge": Transform(
-                    name="capitalized",
-                    to_beaker="capitalized",
-                    func=capitalized,
-                    error_map={},
-                    whole_record=False,
-                    allow_filter=True,
-                ),
-            }
-        ],
-    }
-
-
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
 def test_run_fruits(mode):
     fruits.reset()
