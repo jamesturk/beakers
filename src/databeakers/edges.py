@@ -1,6 +1,5 @@
 import inspect
 from typing import AsyncGenerator, Callable, Generator
-from enum import Enum
 from pydantic import BaseModel
 from structlog import get_logger
 from databeakers.exceptions import NoEdgeResult
@@ -15,14 +14,14 @@ class Edge(BaseModel):
     whole_record: bool = False
 
 
-class SpecialForward(Enum):
+class Destination:
     forward = "_forward"
     stop = "_stop"
 
 
-class ForwardResult(BaseModel):
-    beaker_name: str
-    data: BaseModel
+class EdgeResult(BaseModel):
+    dest: str
+    data: BaseModel | None
     id_: str | None
 
 
@@ -48,7 +47,9 @@ class Transform(Edge):
         self.func = func
         self.allow_filter = allow_filter
 
-    async def _run(self, id_: str, data: BaseModel | Record) -> BaseModel:
+    async def _run(
+        self, id_: str, data: BaseModel | Record
+    ) -> AsyncGenerator[EdgeResult, None]:
         try:
             result = self.func(data)
         except Exception as e:
@@ -63,10 +64,12 @@ class Transform(Edge):
             ) in self.error_map.items():
                 if isinstance(e, error_types):
                     lg.info("error handled", error_beaker=error_beaker_name)
-                    yield ForwardResult(
-                        error_beaker_name,
-                        ErrorType(data=data, exception=str(e), exc_type=str(type(e))),
-                        id_,
+                    yield EdgeResult(
+                        dest=error_beaker_name,
+                        data=ErrorType(
+                            item=data, exception=str(e), exc_type=str(type(e))
+                        ),
+                        id_=id_,
                     )
                     # done after one error
                     return
@@ -82,11 +85,15 @@ class Transform(Edge):
             num_yielded = 0
             if isinstance(result, Generator):
                 for item in result:
-                    yield ForwardResult(SpecialForward.forward, item, None)  # new id
+                    yield EdgeResult(
+                        dest=Destination.forward, data=item, id_=None
+                    )  # new id
                     num_yielded += 1
             else:
                 async for item in result:
-                    yield ForwardResult(SpecialForward.forward, item, None)  # new id
+                    yield EdgeResult(
+                        dest=Destination.forward, data=item, id_=None
+                    )  # new id
                     num_yielded += 1
             log.info(
                 "generator yielded",
@@ -96,13 +103,15 @@ class Transform(Edge):
             )
             if not num_yielded:
                 if self.allow_filter:
-                    yield ForwardResult(SpecialForward.stop, None, id_)
+                    yield EdgeResult(dest=Destination.stop, data=None, id_=id_)
                 else:
                     raise NoEdgeResult("edge generator yielded no items")
         elif result is not None:
-            yield ForwardResult(SpecialForward.forward, result, id)  # new id
+            # standard case -> forward result
+            yield EdgeResult(dest=Destination.forward, data=result, id_=id_)
         elif self.allow_filter:
-            yield ForwardResult(SpecialForward.stop, None, id)
+            # if nothing is returned, and filterin is allowed, remove from stream
+            yield EdgeResult(dest=Destination.stop, data=None, id_=id_)
         else:
             raise NoEdgeResult("transform returned None")
 

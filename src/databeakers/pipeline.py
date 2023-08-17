@@ -5,7 +5,6 @@ import datetime
 import networkx  # type: ignore
 import pydot
 from collections import defaultdict
-from collections.abc import Generator, AsyncGenerator
 from typing import Iterable, Callable, Type
 from types import UnionType
 from pydantic import BaseModel
@@ -14,8 +13,8 @@ from structlog import get_logger
 from ._record import Record
 from ._models import RunMode, RunReport, Seed, ErrorType
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .edges import Transform, Edge
-from .exceptions import ItemNotFound, SeedError, InvalidGraph, NoEdgeResult
+from .edges import Transform, Edge, Destination
+from .exceptions import ItemNotFound, SeedError, InvalidGraph
 
 
 log = get_logger()
@@ -491,87 +490,35 @@ class Pipeline:
 
         Returns: result_beaker_name
         """
-        try:
-            data: BaseModel | Record | None = None
-            if edge.whole_record:
-                # data = self._get_full_record(id) if record is None else record
-                # result = edge.func(data)
-                data = record if record is not None else self._get_full_record(id)
-                record = data
-                result = edge.func(data)
-            else:
-                data = item
-                if data is None and record:
-                    data = record[cur_b]
-                item = data
-                result = edge.func(data)
-            if inspect.isawaitable(result):
-                result = await result
-            if record:
-                record[to_beaker.name] = result
-        except Exception as e:
-            lg = log.bind(
-                exception=repr(e),
-                edge=edge,
-                id=id,
-                data=data,
-            )
-            for (
-                error_types,
-                error_beaker_name,
-            ) in edge.error_map.items():
-                if isinstance(e, error_types):
-                    lg.info("error handled", error_beaker=error_beaker_name)
-                    error_beaker = self.beakers[error_beaker_name]
-                    error_beaker.add_item(
-                        ErrorType(
-                            item=data,
-                            exception=str(e),
-                            exc_type=str(type(e)),
-                        ),
-                        parent=id,
-                        id_=id,
-                    )
-                    return error_beaker.name
-            else:
-                # no error handler, re-raise
-                log.critical("unhandled error")
-                raise
 
-        # propagate result to downstream beakers
-        # TODO: this dispatch should be inside classes?
-        # transform: add result to to_beaker (if not None)
-        if isinstance(result, (Generator, AsyncGenerator)):
-            num_yielded = 0
-            if isinstance(result, Generator):
-                for i in result:
-                    to_beaker.add_item(i, parent=id, id_=None)
-                    num_yielded += 1
-            else:
-                async for i in result:
-                    to_beaker.add_item(i, parent=id, id_=None)
-                    num_yielded += 1
-            log.info(
-                "generator yielded",
-                edge=edge,
-                id=id,
-                num_yielded=num_yielded,
-                to_beaker=to_beaker.name,
-            )
-            if num_yielded:
-                to_beaker_name = to_beaker.name
-            elif edge.allow_filter:
-                to_beaker_name = "_none"
-            else:
-                raise NoEdgeResult("generator yielded no items")
-        elif result is not None:
-            to_beaker.add_item(result, parent=id, id_=id)
-            to_beaker_name = to_beaker.name
-        elif edge.allow_filter:
-            to_beaker_name = "_none"
+        # figure out what is going to be passed in
+        data: BaseModel | Record | None = None
+        if edge.whole_record:
+            data = record if record is not None else self._get_full_record(id)
+            record = data
         else:
-            raise NoEdgeResult("transform returned None")
-        return to_beaker_name
+            data = item
+            if data is None and record:
+                data = record[cur_b]
+
+        # run the edge function & push results to dest beakers
+        n_results = 0
+        async for e_result in edge._run(id, data):
+            print("e_result", e_result)
+            n_results += 1
+            if e_result.dest == Destination.forward:
+                to_beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
+            elif e_result.dest == Destination.stop:
+                return Destination.stop
+                pass  # TODO: log this and store id as dead
+            else:
+                beaker = self.beakers[e_result.dest]
+                beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
+
+        # only if there's one result (TODO: error handling?)
+        if record and n_results == 1:
+            record[to_beaker.name] = e_result.data
+        return to_beaker.name
 
     async def _run_one_item_river(
         self, record: Record, cur_b: str, only_beakers: list[str] | None = None
