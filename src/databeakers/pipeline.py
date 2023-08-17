@@ -504,21 +504,21 @@ class Pipeline:
         # run the edge function & push results to dest beakers
         n_results = 0
         async for e_result in edge._run(id, data):
-            print("e_result", e_result)
             n_results += 1
             if e_result.dest == Destination.forward:
                 to_beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
             elif e_result.dest == Destination.stop:
                 return Destination.stop
-                pass  # TODO: log this and store id as dead
             else:
                 beaker = self.beakers[e_result.dest]
                 beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
 
-        # only if there's one result (TODO: error handling?)
-        if record and n_results == 1:
+        if record:
             record[to_beaker.name] = e_result.data
-        return to_beaker.name
+        if e_result.dest == Destination.forward:
+            return to_beaker.name
+        else:
+            return e_result.dest
 
     async def _run_one_item_river(
         self, record: Record, cur_b: str, only_beakers: list[str] | None = None
