@@ -54,16 +54,15 @@ class Transform(Edge):
     async def _run(
         self, id_: str, data: BaseModel | Record
     ) -> AsyncGenerator[EdgeResult, None]:
+        lg = log.bind(
+            edge=self.name, edge_type="transform", id_=id_, to_beaker=self.to_beaker
+        )
         try:
             result = self.func(data)
             if inspect.isawaitable(result):
                 result = await result
         except Exception as e:
-            lg = log.bind(
-                exception=repr(e),
-                id=id_,
-                data=data,
-            )
+            lg = lg.bind(exception=repr(e))
             for (
                 error_types,
                 error_beaker_name,
@@ -81,7 +80,7 @@ class Transform(Edge):
                     return
             else:
                 # no error handler, re-raise
-                log.critical("unhandled error", exception=str(e))
+                lg.critical("unhandled error", exception=str(e))
                 raise
 
         if isinstance(result, (Generator, AsyncGenerator)):
@@ -94,12 +93,7 @@ class Transform(Edge):
                 async for item in result:
                     yield EdgeResult(dest=self.to_beaker, data=item, id_=None)  # new id
                     num_yielded += 1
-            log.info(
-                "generator yielded",
-                edge=self.name,
-                id=id_,
-                num_yielded=num_yielded,
-            )
+            lg.info("transform (generator)", num_yielded=num_yielded)
             if not num_yielded:
                 if self.allow_filter:
                     yield EdgeResult(dest=Destination.stop, data=None, id_=id_)
@@ -107,9 +101,11 @@ class Transform(Edge):
                     raise NoEdgeResult("edge generator yielded no items")
         elif result is not None:
             # standard case -> forward result
+            lg.info("transform")
             yield EdgeResult(dest=self.to_beaker, data=result, id_=id_)
         elif self.allow_filter:
-            # if nothing is returned, and filterin is allowed, remove from stream
+            # if nothing is returned, and filtering is allowed, remove from stream
+            lg.info("transform (removed)", result=None)
             yield EdgeResult(dest=Destination.stop, data=None, id_=id_)
         else:
             raise NoEdgeResult("transform returned None")
@@ -141,22 +137,25 @@ class Splitter(Edge):
     async def _run(
         self, id_: str, data: BaseModel | Record
     ) -> AsyncGenerator[EdgeResult, None]:
+        lg = log.bind(
+            edge=self.name, edge_type="splitter", id_=id_, to_beaker=self.to_beaker
+        )
         try:
             result = self.func(data)
+            lg = lg.bind(splitter_result=result)
         except Exception as e:
-            log.critical(
+            lg.critical(
                 "splitter function raised exception",
-                edge=self,
                 exception=str(e),
-                id=id_,
-                data=data,
             )
             raise
 
         if result not in self.splitter_map:
+            lg.critical("bad splitter result")
             raise BadSplitResult(
                 f"splitter result {result} not in splitter map {self.splitter_map}"
             )
+        log.info("splitter dispatch")
         async for item in self.splitter_map[result]._run(id_, data):
             yield item
 
