@@ -595,18 +595,29 @@ class Pipeline:
                 pydg.add_node(pydot.Node(b.name, color="grey"))
             else:
                 pydg.add_node(pydot.Node(b.name, color="blue"))
+
+        seen = set()
         for from_b, to_b, e in self.graph.edges(data=True):
             edge = e["edge"]
-            pydg.add_edge(pydot.Edge(from_b, to_b, label=edge.name))
-            for error_types, error_beaker_name in edge.error_map.items():
-                if error_beaker_name not in excludes:
-                    pydg.add_edge(
-                        pydot.Edge(
-                            from_b,
-                            error_beaker_name,
-                            label=f"errors: {error_types}",
-                            color="red",
-                            samehead=error_beaker_name,
+            if edge.name in seen:
+                continue
+            seen.add(edge.name)
+            if isinstance(edge, Transform):
+                pydg.add_edge(pydot.Edge(from_b, to_b, label=edge.name))
+                for error_types, error_beaker_name in edge.error_map.items():
+                    if error_beaker_name not in excludes:
+                        pydg.add_edge(
+                            pydot.Edge(
+                                from_b,
+                                error_beaker_name,
+                                label=f"errors: {error_types}",
+                                color="red",
+                                samehead=error_beaker_name,
+                            )
                         )
-                    )
+            elif isinstance(edge, Splitter):
+                pydg.add_node(pydot.Node(edge.name, color="green", shape="diamond"))
+                pydg.add_edge(pydot.Edge(from_b, edge.name))
+                for beaker in edge.out_beakers():
+                    pydg.add_edge(pydot.Edge(edge.name, beaker))
         return pydg

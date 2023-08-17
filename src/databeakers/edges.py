@@ -120,30 +120,30 @@ class Transform(Edge):
 
 
 class Splitter(Edge):
-    splitter_func: Callable
+    func: Callable
     splitter_map: dict[str, Transform]
     name: str | None = None
 
     def __init__(
         self,
         *,
-        splitter_func: Callable,
+        func: Callable,
         splitter_map: dict[str, Transform],
         name: str | None = None,
         whole_record: bool = False,
     ):
         super().__init__(
             whole_record=whole_record,
-            splitter_func=splitter_func,
+            func=func,
             splitter_map=splitter_map,
         )
-        self.name = name or callable_name(splitter_func)
+        self.name = name or callable_name(func)
 
     async def _run(
         self, id_: str, data: BaseModel | Record
     ) -> AsyncGenerator[EdgeResult, None]:
         try:
-            result = self.splitter_func(data)
+            result = self.func(data)
         except Exception as e:
             log.critical(
                 "splitter function raised exception",

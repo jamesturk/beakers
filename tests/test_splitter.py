@@ -42,7 +42,7 @@ def pipeline():
     p.add_splitter(
         "word",
         Splitter(
-            splitter_func=splitter_func,
+            func=splitter_func,
             splitter_map={
                 "animal": animal_t,
                 "mineral": mineral_t,
