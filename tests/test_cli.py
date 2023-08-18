@@ -1,6 +1,8 @@
+import pytest
 from typer.testing import CliRunner
 from databeakers.cli import app
 from examples import fruits
+import os
 
 """
 These are basically E2E tests & not as isolated as other unit tests.
@@ -13,6 +15,11 @@ overwrite the database.
 runner = CliRunner()
 
 
+@pytest.fixture
+def no_color():
+    os.environ["NO_COLOR"] = "1"
+
+
 def test_no_pipeline():
     result = runner.invoke(app, ["seeds"])
     assert (
@@ -22,7 +29,7 @@ def test_no_pipeline():
     assert result.exit_code == 1
 
 
-def test_list_seeds_simple():
+def test_list_seeds_simple(no_color):
     fruits.reset()
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seeds"])
     assert "word\n  abc\n  errors\n" in result.output
@@ -32,7 +39,8 @@ def test_list_seeds_simple():
 def test_run_seed_simple():
     fruits.reset()
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
-    assert "3 items" in result.output
+    assert "num_items=3" in result.output
+    assert "seed_name=abc" in result.output
     assert result.exit_code == 0
     assert len(fruits.beakers["word"]) == 3
 
@@ -41,7 +49,7 @@ def test_run_seed_twice():
     fruits.reset()
     runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
-    assert "abc already run at" in result.output
+    assert "abc already run" in result.output
     assert result.exit_code == 1
 
 
@@ -51,7 +59,7 @@ def test_clear_all():
     result = runner.invoke(
         app, ["--pipeline", "tests.examples.fruits", "clear", "--all"]
     )
-    assert result.output == "Reset 1 seeds\nReset word (3)\n"
+    assert result.output == "Reset word (3)\n"
     assert result.exit_code == 0
 
 

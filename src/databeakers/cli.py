@@ -1,6 +1,5 @@
 import importlib
 import time
-import datetime
 import typer
 import sys
 import re
@@ -11,6 +10,7 @@ from rich.text import Text
 from rich.live import Live
 from typing import List, Optional
 from typing_extensions import Annotated
+
 
 from ._models import RunMode
 from .exceptions import SeedError, InvalidGraph
@@ -150,11 +150,13 @@ def seeds(ctx: typer.Context) -> None:
     """
     for beaker, seeds in ctx.obj.list_seeds().items():
         typer.secho(beaker)
-        for seed in seeds:
+        for seed, runs in seeds.items():
             typer.secho(
                 f"  {seed}",
-                fg=typer.colors.GREEN if seed.num_items else typer.colors.YELLOW,
+                fg=typer.colors.GREEN if len(runs) else typer.colors.YELLOW,
             )
+            for run in runs:
+                typer.secho(f"    {run}", fg=typer.colors.GREEN)
 
 
 @app.command()
@@ -168,13 +170,8 @@ def seed(
     Run a seed.
     """
     try:
-        start_time = time.time()
-        num_items = ctx.obj.run_seed(name, num_items, reset)
-        duration = time.time() - start_time
-        duration_dt = datetime.timedelta(seconds=duration)
-        typer.secho(
-            f"Seeded with {num_items} items in {duration_dt}", fg=typer.colors.GREEN
-        )
+        seed_run = ctx.obj.run_seed(name, max_items=num_items, reset=reset)
+        typer.secho(f"Ran seed: {seed_run}", fg=typer.colors.GREEN)
     except SeedError as e:
         typer.secho(f"{e}", fg=typer.colors.RED)
         raise typer.Exit(1)

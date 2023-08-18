@@ -69,11 +69,13 @@ fruits.add_transform(
     lambda r: Sentence(sentence=f"{r['normalized'].word} is a delicious fruit."),
     whole_record=True,
 )
-fruits.add_seed(
-    "abc",
-    "word",
+fruits.register_seed(
     lambda: [Word(word="apple"), Word(word="BANANA"), Word(word="cat")],
+    "word",
+    seed_name="abc",
 )
-fruits.add_seed(
-    "errors", "word", lambda: [Word(word=100), Word(word="pear"), Word(word="ERROR")]
+fruits.register_seed(
+    lambda: [Word(word=100), Word(word="pear"), Word(word="ERROR")],
+    "word",
+    seed_name="errors",
 )

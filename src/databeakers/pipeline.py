@@ -1,5 +1,4 @@
 import inspect
-import sqlite3
 import asyncio
 import datetime
 import networkx  # type: ignore
@@ -9,9 +8,11 @@ from typing import Iterable, Callable, Type, Generator
 from types import UnionType
 from pydantic import BaseModel
 from structlog import get_logger
+from sqlite_utils import Database
 
 from ._record import Record
-from ._models import RunMode, RunReport, Seed, ErrorType
+from ._models import RunMode, RunReport, ErrorType
+from .seeds import SeedRun, _pydantic_to_schema, _pyd_wrap
 from .beakers import Beaker, SqliteBeaker, TempBeaker
 from .edges import Transform, Edge, Destination, Splitter
 from .exceptions import ItemNotFound, SeedError, InvalidGraph
@@ -20,32 +21,113 @@ from .exceptions import ItemNotFound, SeedError, InvalidGraph
 log = get_logger()
 
 
+class Seed(BaseModel):
+    name: str
+    func: Callable[[], Iterable[BaseModel]]
+    beaker_name: str
+
+
 class Pipeline:
     def __init__(self, name: str, db_name: str = "beakers.db", *, num_workers: int = 1):
         self.name = name
         self.num_workers = num_workers
         self.graph = networkx.DiGraph()
         self.beakers: dict[str, Beaker] = {}
-        self.seeds: dict[str, tuple[str, Callable[[], Iterable[BaseModel]]]] = {}
-        self.db = sqlite3.connect(db_name)
-        self.db.row_factory = sqlite3.Row  # type: ignore
-        cursor = self.db.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS _seeds (
-                name TEXT, 
-                beaker_name TEXT,
-                num_items INTEGER,
-                imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
+        self.seeds: dict[str, Seed] = {}
+        self._db = Database(memory=True) if db_name == ":memory:" else Database(db_name)
+        self._db.enable_wal()
+        self._db.execute("PRAGMA synchronous=1;")
+        self._seeds_t = self._db.table("_seed_runs").create(
+            _pydantic_to_schema(SeedRun),
+            pk="run_repr",
+            if_not_exists=True,
         )
-        cursor.execute("PRAGMA journal_mode=WAL;")
-        cursor.execute("PRAGMA synchronous=1;")
-        # result = cursor.fetchone()
-        # if tuple(result)[0] != "wal":
-        #     raise SystemError(f"Unable to set WAL mode {result[0]}")
 
     def __repr__(self) -> str:
         return f"Pipeline({self.name})"
+
+    # section: seeds ##########################################################
+
+    def register_seed(
+        self,
+        callable: Callable[[], Iterable[BaseModel]],
+        beaker_name: str,
+        seed_name: str = "",
+    ):
+        name = seed_name or callable.__name__
+        self.seeds[name] = Seed(name=name, func=callable, beaker_name=beaker_name)
+
+    def list_seeds(self) -> dict[str, dict[str, list]]:
+        # without defaultdict so return type is clear
+        by_beaker: dict[str, dict[str, list]] = {}
+        for seed in self.seeds.values():
+            if seed.beaker_name not in by_beaker:
+                by_beaker[seed.beaker_name] = {}
+            by_beaker[seed.beaker_name][seed.name] = self.get_seed_runs(
+                seed_name=seed.name
+            )
+        return by_beaker
+
+    def get_seed_runs(self, seed_name: str) -> list[SeedRun]:
+        return list(
+            _pyd_wrap(self._seeds_t.rows_where("seed_name = ?", [seed_name]), SeedRun)
+        )
+
+    def get_seed_run(self, run_repr: str) -> SeedRun | None:
+        try:
+            return list(
+                _pyd_wrap(self._seeds_t.rows_where("run_repr = ?", [run_repr]), SeedRun)
+            )[0]
+        except IndexError:
+            return None
+
+    def run_seed(self, seed_name: str, *, max_items: int = 0, reset=False, **kwargs):
+        try:
+            seed = self.seeds[seed_name]
+        except KeyError:
+            raise SeedError(f"Seed {seed_name} not found")
+
+        # TODO: improve this
+        run_repr = f"sr:{seed.name}"
+        num_items = 0
+
+        beaker = self.beakers[seed.beaker_name]
+        if reset:
+            beaker.reset()
+            self._seeds_t.delete_where("run_repr = ?", [run_repr])
+
+        def _add_items(items, run_repr):
+            for item in items:
+                beaker.add_item(item, parent=run_repr, id_=None)
+
+        if already_run := self.get_seed_run(run_repr):
+            raise SeedError(f"Seed {seed_name} already run: {already_run}")
+
+        start_time = datetime.datetime.utcnow()
+        item_buffer = []
+        CHUNK_SIZE = 100
+        for item in seed.func():
+            num_items += 1
+            item_buffer.append(item)
+            if num_items == max_items:
+                break
+            if len(item_buffer) > CHUNK_SIZE:
+                _add_items(item_buffer, run_repr)
+                item_buffer = []
+        if item_buffer:
+            _add_items(item_buffer, run_repr)
+        end_time = datetime.datetime.utcnow()
+        sr = SeedRun(
+            run_repr=run_repr,
+            seed_name=seed.name,
+            beaker_name=seed.beaker_name,
+            num_items=num_items,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
+        self._seeds_t.insert(dict(sr))
+        return sr
 
     # section: graph ##########################################################
 
@@ -196,74 +278,14 @@ class Pipeline:
                 edge=splitter,
             )
 
-    # section: seeds ##########################################################
-
-    def add_seed(
-        self,
-        seed_name: str,
-        beaker_name: str,
-        seed_func: Callable[[], Iterable[BaseModel]],
-    ) -> None:
-        self.seeds[seed_name] = (beaker_name, seed_func)
-
-    def list_seeds(self) -> dict[str, list[Seed]]:
-        by_beaker = defaultdict(list)
-        for seed_name, (beaker_name, _) in self.seeds.items():
-            seed = self._db_get_seed(seed_name)
-            if not seed:
-                seed = Seed(name=seed_name)
-            by_beaker[beaker_name].append(seed)
-        return dict(by_beaker)
-
-    def _db_get_seed(self, seed_name: str) -> Seed | None:
-        cursor = self.db.cursor()
-        cursor.row_factory = sqlite3.Row  # type: ignore
-        cursor.execute("SELECT * FROM _seeds WHERE name = ?", (seed_name,))
-        if row := cursor.fetchone():
-            return Seed(**row)
-        else:
-            return None
-
-    def run_seed(self, seed_name: str, max_items: int = 0, reset: bool = False) -> int:
-        try:
-            beaker_name, seed_func = self.seeds[seed_name]
-        except KeyError:
-            raise SeedError(f"Seed {seed_name} not found")
-        beaker = self.beakers[beaker_name]
-
-        num_items = 0
-        parent_id = f"seed:{seed_name}"
-        # transaction around seed
-        with self.db:
-            if reset:
-                beaker.delete(parent=parent_id)
-                self.db.execute("DELETE FROM _seeds WHERE name = ?", (seed_name,))
-
-            if seed := self._db_get_seed(seed_name):
-                raise SeedError(f"{seed_name} already run at {seed.imported_at}")
-
-            for item in seed_func():
-                beaker.add_item(item, parent=parent_id)
-                num_items += 1
-                if max_items and num_items >= max_items:
-                    break
-            self.db.execute(
-                "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
-                (seed_name, beaker_name, num_items),
-            )
-
-        return num_items
-
     # section: commands #######################################################
 
     def reset(self) -> list[str]:
         reset_list = []
         # transaction around entire reset
-        with self.db:
-            cursor = self.db.cursor()
-            res = cursor.execute("DELETE FROM _seeds")
-            if res.rowcount:
-                reset_list.append(f"{res.rowcount} seeds")
+        with self._db.conn:
+            self._seeds_t.delete_where("1=1")
+            #    reset_list.append(f"seeds ({seed_count})")
             for beaker in self.beakers.values():
                 if bl := len(beaker):
                     beaker.reset()
@@ -405,7 +427,7 @@ class Pipeline:
 
                 try:
                     # transaction around each waterfall step
-                    with self.db:
+                    with self._db.conn:
                         result_loc = await self._run_edge_func(
                             from_beaker.name, edge, id, item=item
                         )
@@ -452,7 +474,7 @@ class Pipeline:
 
         for id in start_beaker.id_set():
             # transaction around river runs
-            with self.db:
+            with self._db.conn:
                 record = self._get_full_record(id)
                 log.debug("river record", id=id)
                 for from_b, to_b in loop.run_until_complete(

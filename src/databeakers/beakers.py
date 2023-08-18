@@ -4,6 +4,7 @@ import uuid
 from pydantic import BaseModel
 from typing import Iterable, Type, TYPE_CHECKING
 from structlog import get_logger
+from sqlite_utils.db import NotFoundError
 from .exceptions import ItemNotFound
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -122,20 +123,23 @@ class SqliteBeaker(Beaker):
     def __init__(self, name: str, model: PydanticModel, pipeline: "Pipeline"):
         super().__init__(name, model, pipeline)
         # create table if it doesn't exist
-        self.pipeline.db.execute(
-            f"CREATE TABLE IF NOT EXISTS {self.name} "
-            "(uuid TEXT PRIMARY KEY, parent TEXT, data JSON)",
+        self._table = self.pipeline._db[name].create(
+            {
+                "uuid": str,
+                "parent": str,
+                "data": dict,  # JSON
+            },
+            pk="uuid",
+            if_not_exists=True,
         )
+        # TODO: allow pydantic-to-model here
 
     def items(self) -> Iterable[tuple[str, BaseModel]]:
-        cursor = self.pipeline.db.execute(f"SELECT uuid, data FROM {self.name}")
-        data = cursor.fetchall()
-        for item in data:
+        for item in self._table.rows:
             yield item["uuid"], self.model(**json.loads(item["data"]))
 
     def __len__(self) -> int:
-        cursor = self.pipeline.db.execute(f"SELECT COUNT(*) FROM {self.name}")
-        return cursor.fetchone()[0]
+        return self._table.count
 
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
@@ -150,31 +154,26 @@ class SqliteBeaker(Beaker):
         elif id_ is None:
             id_ = str(uuid.uuid1())
         log.debug("add_item", item=item, parent=parent, id=id_)
-        self.pipeline.db.execute(
-            f"INSERT INTO {self.name} (uuid, parent, data) VALUES (?, ?, ?)",
-            (id_, parent, item.model_dump_json()),
+        self._table.insert(
+            {
+                "uuid": id_,
+                "parent": parent,
+                "data": item.model_dump_json(),
+            }
         )
 
     def reset(self) -> None:
-        self.pipeline.db.execute(f"DELETE FROM {self.name}")
-        self.pipeline.db.commit()
+        self._table.delete_where()
 
     def get_item(self, id: str) -> BaseModel:
-        cursor = self.pipeline.db.execute(
-            f"SELECT data FROM {self.name} WHERE uuid = ?", (id,)
-        )
-        row = cursor.fetchone()
-        if row is None:
+        try:
+            row = self._table.get(id)
+        except NotFoundError:
             raise ItemNotFound(f"{id} not found in {self.name}")
         return self.model(**json.loads(row["data"]))
 
     def parent_id_set(self) -> set[str]:
-        cursor = self.pipeline.db.execute(f"SELECT parent FROM {self.name}")
-        return set(row["parent"] for row in cursor.fetchall())
+        return {row["parent"] for row in self._table.rows}
 
     def delete(self, parent: str) -> int:
-        cursor = self.pipeline.db.execute(
-            f"DELETE FROM {self.name} WHERE parent = ?", (parent,)
-        )
-        self.pipeline.db.commit()
-        return cursor.rowcount
+        return self._table.delete_where(parent=parent).rowcount

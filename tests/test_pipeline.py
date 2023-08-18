@@ -174,19 +174,15 @@ def test_run_early_end(mode):
 @pytest.mark.parametrize("mode", [RunMode.waterfall, RunMode.river])
 def test_run_late_start(mode):
     fruits.reset()
-    fruits.add_seed(
-        "prenormalized",
-        "normalized",
-        lambda: [
-            Word(word="apple"),
-            Word(word="pear"),
-            Word(word="banana"),
-            Word(word="egg"),
-            Word(word="fish"),
-        ],
-    )
-    fruits.run_seed("prenormalized")
-    assert len(fruits.beakers["word"]) == 0
+    # inject content mid-stream for testing
+    for word in [
+        Word(word="apple"),
+        Word(word="pear"),
+        Word(word="banana"),
+        Word(word="egg"),
+        Word(word="fish"),
+    ]:
+        fruits.beakers["normalized"].add_item(word, parent="x")
     assert len(fruits.beakers["normalized"]) == 5
     report = fruits.run(mode, only_beakers=["normalized", "fruit", "sentence"])
 
@@ -297,10 +293,10 @@ def test_run_async_functions_in_pipeline(mode):
         "sentence",
         sentence_maker,
     )
-    async_test.add_seed("words", "word", words_seed)
 
     async_test.reset()
-    async_test.run_seed("words")
+    for word in words_seed():
+        async_test.beakers["word"].add_item(word, parent=None)
     assert len(async_test.beakers["word"]) == 60
     report = async_test.run(mode)
 
@@ -323,19 +319,14 @@ def test_run_generator_func(mode):
         for perm in itertools.permutations(str(word.word)):
             yield Word(word="".join(perm))
 
-    def words_seed() -> Generator[Word, None, None]:
-        yield from [
-            Word(word="cat"),
-            Word(word="dog"),
-        ]
-
     p = Pipeline("test", ":memory:")
     p.add_beaker("word", Word)
     p.add_beaker("anagram", Word)
     p.add_transform("word", "anagram", anagrams)
-    p.add_seed("words", "word", words_seed)
 
-    p.run_seed("words")
+    p.beakers["word"].add_item(Word(word="cat"), parent=None)
+    p.beakers["word"].add_item(Word(word="dog"), parent=None)
+
     assert len(p.beakers["word"]) == 2
     report = p.run(mode)
 
@@ -360,9 +351,9 @@ def test_run_async_generator_func(mode):
     p.add_beaker("word", Word)
     p.add_beaker("anagram", Word)
     p.add_transform("word", "anagram", anagrams)
-    p.add_seed("words", "word", words_seed)
+    p.beakers["word"].add_item(Word(word="cat"), parent=None)
+    p.beakers["word"].add_item(Word(word="dog"), parent=None)
 
-    p.run_seed("words")
     assert len(p.beakers["word"]) == 2
     report = p.run(mode)
 
