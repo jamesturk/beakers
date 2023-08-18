@@ -11,20 +11,14 @@ from structlog import get_logger
 from sqlite_utils import Database
 
 from ._record import Record
-from ._models import RunMode, RunReport, ErrorType
-from .seeds import SeedRun, _pydantic_to_schema, _pyd_wrap
+from ._models import RunMode, RunReport, ErrorType, SeedRun, Seed
+from ._utils import callable_name, pydantic_to_schema, pyd_wrap
 from .beakers import Beaker, SqliteBeaker, TempBeaker
 from .edges import Transform, Edge, Destination, Splitter
 from .exceptions import ItemNotFound, SeedError, InvalidGraph
 
 
 log = get_logger()
-
-
-class Seed(BaseModel):
-    name: str
-    func: Callable[[], Iterable[BaseModel]]
-    beaker_name: str
 
 
 class Pipeline:
@@ -38,7 +32,7 @@ class Pipeline:
         self._db.enable_wal()
         self._db.execute("PRAGMA synchronous=1;")
         self._seeds_t = self._db.table("_seed_runs").create(
-            _pydantic_to_schema(SeedRun),
+            pydantic_to_schema(SeedRun),
             pk="run_repr",
             if_not_exists=True,
         )
@@ -54,7 +48,7 @@ class Pipeline:
         beaker_name: str,
         seed_name: str = "",
     ):
-        name = seed_name or callable.__name__
+        name = seed_name or callable_name(callable)
         self.seeds[name] = Seed(name=name, func=callable, beaker_name=beaker_name)
 
     def list_seeds(self) -> dict[str, dict[str, list]]:
@@ -70,13 +64,13 @@ class Pipeline:
 
     def get_seed_runs(self, seed_name: str) -> list[SeedRun]:
         return list(
-            _pyd_wrap(self._seeds_t.rows_where("seed_name = ?", [seed_name]), SeedRun)
+            pyd_wrap(self._seeds_t.rows_where("seed_name = ?", [seed_name]), SeedRun)
         )
 
     def get_seed_run(self, run_repr: str) -> SeedRun | None:
         try:
             return list(
-                _pyd_wrap(self._seeds_t.rows_where("run_repr = ?", [run_repr]), SeedRun)
+                pyd_wrap(self._seeds_t.rows_where("run_repr = ?", [run_repr]), SeedRun)
             )[0]
         except IndexError:
             return None

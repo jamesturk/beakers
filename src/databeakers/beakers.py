@@ -91,6 +91,7 @@ class TempBeaker(Beaker):
             parent = id_ = str(uuid.uuid1())
         if id_ is None:
             id_ = str(uuid.uuid1())
+        log.debug("add_item", item=item, parent=parent, id=id_, beaker=self.name)
         self._items[id_] = item
         self._parent_ids[id_] = parent
 
@@ -153,7 +154,7 @@ class SqliteBeaker(Beaker):
             parent = id_ = str(uuid.uuid1())
         elif id_ is None:
             id_ = str(uuid.uuid1())
-        log.debug("add_item", item=item, parent=parent, id=id_)
+        log.debug("add_item", item=item, parent=parent, id=id_, beaker=self.name)
         self._table.insert(
             {
                 "uuid": id_,

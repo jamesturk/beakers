@@ -4,6 +4,7 @@ Internal pydantic models.
 import datetime
 from enum import Enum
 from pydantic import BaseModel
+from typing import Callable, Iterable
 
 
 class RunMode(Enum):
@@ -19,6 +20,10 @@ class RunMode(Enum):
 
 
 class RunReport(BaseModel):
+    """
+    Represents the result of a run.
+    """
+
     start_time: datetime.datetime
     end_time: datetime.datetime
     only_beakers: list[str] = []
@@ -27,6 +32,40 @@ class RunReport(BaseModel):
 
 
 class ErrorType(BaseModel):
+    """
+    Beaker type for errors.
+    """
+
     item: BaseModel
     exception: str
     exc_type: str
+
+
+class SeedRun(BaseModel):
+    """
+    Database model for a seed run.
+    """
+
+    run_repr: str
+    seed_name: str
+    beaker_name: str
+    num_items: int
+    start_time: datetime.datetime
+    end_time: datetime.datetime
+
+    def __str__(self):
+        duration = self.end_time - self.start_time
+        return (
+            f"SeedRun({self.run_repr}, seed_name={self.seed_name}, beaker_name={self.beaker_name}, "
+            f"num_items={self.num_items}, duration={duration})"
+        )
+
+
+class Seed(BaseModel):
+    """
+    Internal representation of a seed.
+    """
+
+    name: str
+    func: Callable[[], Iterable[BaseModel]]
+    beaker_name: str
