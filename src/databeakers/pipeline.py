@@ -272,20 +272,6 @@ class Pipeline:
                 edge=splitter,
             )
 
-    # section: commands #######################################################
-
-    def reset(self) -> list[str]:
-        reset_list = []
-        # transaction around entire reset
-        with self._db.conn:
-            self._seeds_t.delete_where("1=1")
-            #    reset_list.append(f"seeds ({seed_count})")
-            for beaker in self.beakers.values():
-                if bl := len(beaker):
-                    beaker.reset()
-                    reset_list.append(f"{beaker.name} ({bl})")
-        return reset_list
-
     # section: running ########################################################
 
     def run(
@@ -321,17 +307,6 @@ class Pipeline:
         else:
             raise ValueError(f"Unknown run mode {run_mode}")  # pragma: no cover
 
-    def _beakers_toposort(
-        self, only_beakers: list[str] | None
-    ) -> Generator[str, None, None]:
-        for node in networkx.topological_sort(self.graph):
-            if self.graph.nodes[node]["node_type"] == "split":
-                continue
-            elif only_beakers and node not in only_beakers:
-                continue
-            else:
-                yield node
-
     def _run_waterfall(
         self, only_beakers: list[str] | None, report: RunReport
     ) -> RunReport:
@@ -340,27 +315,6 @@ class Pipeline:
             report.nodes[node] = self._run_node_waterfall(node)
 
         return report
-
-    def _get_full_record(self, id: str) -> Record:
-        """
-        Get the full record for a given id.
-
-        This isn't the most efficient, but for waterfall runs
-        the alternative is to store all records in memory.
-        """
-        rec = Record(id=id)
-        for beaker_name, beaker in self.beakers.items():
-            try:
-                rec[beaker_name] = beaker.get_item(id)
-            except ItemNotFound:
-                pass
-        return rec
-
-    def _all_upstream_ids(self, edge: Edge):
-        all_upstream = set()
-        for error_b in edge.out_beakers():
-            all_upstream |= self.beakers[error_b].parent_id_set()
-        return all_upstream
 
     def _run_node_waterfall(self, node: str) -> dict[str, int]:
         """
@@ -519,10 +473,6 @@ class Pipeline:
             record[e_result.dest] = e_result.data
         return e_result.dest
 
-    def _out_edges(self, cur_b):
-        for _, _, e in self.graph.out_edges(cur_b, data=True):
-            yield e["edge"]
-
     async def _run_one_item_river(
         self, record: Record, cur_b: str, only_beakers: list[str] | None = None
     ) -> list[tuple[str, str]]:
@@ -578,6 +528,20 @@ class Pipeline:
 
         return from_to
 
+    # section: commands #######################################################
+
+    def reset(self) -> list[str]:
+        reset_list = []
+        # transaction around entire reset
+        with self._db.conn:
+            self._seeds_t.delete_where("1=1")
+            #    reset_list.append(f"seeds ({seed_count})")
+            for beaker in self.beakers.values():
+                if bl := len(beaker):
+                    beaker.reset()
+                    reset_list.append(f"{beaker.name} ({bl})")
+        return reset_list
+
     def to_pydot(self, excludes: list[str] | None = None):
         if excludes is None:
             excludes = []
@@ -617,3 +581,41 @@ class Pipeline:
                 pydg.add_node(pydot.Node(edge.name, color="green", shape="diamond"))
                 pydg.add_edge(pydot.Edge(from_b, to_b))
         return pydg
+
+    # section: helper methods ################################################
+
+    def _beakers_toposort(
+        self, only_beakers: list[str] | None
+    ) -> Generator[str, None, None]:
+        for node in networkx.topological_sort(self.graph):
+            if self.graph.nodes[node]["node_type"] == "split":
+                continue
+            elif only_beakers and node not in only_beakers:
+                continue
+            else:
+                yield node
+
+    def _out_edges(self, cur_b):
+        for _, _, e in self.graph.out_edges(cur_b, data=True):
+            yield e["edge"]
+
+    def _all_upstream_ids(self, edge: Edge):
+        all_upstream = set()
+        for error_b in edge.out_beakers():
+            all_upstream |= self.beakers[error_b].parent_id_set()
+        return all_upstream
+
+    def _get_full_record(self, id: str) -> Record:
+        """
+        Get the full record for a given id.
+
+        This isn't the most efficient, but for waterfall runs
+        the alternative is to store all records in memory.
+        """
+        rec = Record(id=id)
+        for beaker_name, beaker in self.beakers.items():
+            try:
+                rec[beaker_name] = beaker.get_item(id)
+            except ItemNotFound:
+                pass
+        return rec
