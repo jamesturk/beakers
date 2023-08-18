@@ -155,12 +155,9 @@ class SqliteBeaker(Beaker):
         elif id_ is None:
             id_ = str(uuid.uuid1())
         log.debug("add_item", item=item, parent=parent, id=id_, beaker=self.name)
-        self._table.insert(
-            {
-                "uuid": id_,
-                "parent": parent,
-                "data": item.model_dump_json(),
-            }
+        self._table.db.execute(
+            f"INSERT INTO {self.name} (uuid, parent, data) VALUES (?, ?, ?)",
+            (id_, parent, item.model_dump_json()),
         )
 
     def reset(self) -> None:

@@ -52,6 +52,39 @@ def test_run_seed(pipeline):
     pipeline.run_seed("places")
 
     assert len(pipeline.beakers["place"]) == 5
+    assert pipeline.get_seed_run("sr:places") is not None
+
+
+@pytest.fixture
+def error_pipeline():
+    def error_seed():
+        for i in range(90):
+            yield Word(word="test")
+        raise ZeroDivisionError()
+
+    p = Pipeline("seeds", ":memory:")
+    p.add_beaker("words", Word)
+    p.register_seed(error_seed, "words")
+    return p
+
+
+def test_run_seed_partial_chunks(error_pipeline):
+    with pytest.raises(ZeroDivisionError):
+        error_pipeline.run_seed("error_seed")
+    assert len(error_pipeline.beakers["words"]) == 0
+
+
+def test_run_seed_partial_chunks_saved(error_pipeline):
+    with pytest.raises(ZeroDivisionError):
+        error_pipeline.run_seed("error_seed", save_partial_chunks=60)
+    assert len(error_pipeline.beakers["words"]) == 60
+
+
+def test_run_seed_partial_chunks_nothing_saved(error_pipeline):
+    # too big of a chunk size, error is raised before commit
+    with pytest.raises(ZeroDivisionError):
+        error_pipeline.run_seed("error_seed", save_partial_chunks=100)
+    assert len(error_pipeline.beakers["words"]) == 0
 
 
 def test_run_two_seeds(pipeline):

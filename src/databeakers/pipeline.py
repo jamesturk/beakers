@@ -9,6 +9,7 @@ from types import UnionType
 from pydantic import BaseModel
 from structlog import get_logger
 from sqlite_utils import Database
+from sqlite_utils.utils import chunks
 
 from ._record import Record
 from ._models import RunMode, RunReport, ErrorType, SeedRun, Seed
@@ -31,6 +32,7 @@ class Pipeline:
         self._db = Database(memory=True) if db_name == ":memory:" else Database(db_name)
         self._db.enable_wal()
         self._db.execute("PRAGMA synchronous=1;")
+        self._db.conn.isolation_level = None
         self._seeds_t = self._db.table("_seed_runs").create(
             pydantic_to_schema(SeedRun),
             pk="run_repr",
@@ -75,7 +77,15 @@ class Pipeline:
         except IndexError:
             return None
 
-    def run_seed(self, seed_name: str, *, max_items: int = 0, reset=False, **kwargs):
+    def run_seed(
+        self,
+        seed_name: str,
+        *,
+        max_items: int = 0,
+        reset=False,
+        save_partial_chunks=10000000000000000,
+        **kwargs,
+    ):
         try:
             seed = self.seeds[seed_name]
         except KeyError:
@@ -90,27 +100,25 @@ class Pipeline:
             beaker.reset()
             self._seeds_t.delete_where("run_repr = ?", [run_repr])
 
-        def _add_items(items, run_repr):
-            for item in items:
-                beaker.add_item(item, parent=run_repr, id_=None)
-
         if already_run := self.get_seed_run(run_repr):
             raise SeedError(f"Seed {seed_name} already run: {already_run}")
 
         start_time = datetime.datetime.utcnow()
-        item_buffer = []
-        CHUNK_SIZE = 100
-        for item in seed.func():
-            num_items += 1
-            item_buffer.append(item)
+        chunk_size = save_partial_chunks or 500
+
+        for chunk in chunks(seed.func(), chunk_size):
+            # transaction per chunk
+            with self._db.conn:
+                self._db.execute("BEGIN TRANSACTION;")
+                for item in chunk:
+                    beaker.add_item(item, parent=run_repr, id_=None)
+                    num_items += 1
+                    if num_items == max_items:
+                        break
             if num_items == max_items:
                 break
-            if len(item_buffer) > CHUNK_SIZE:
-                _add_items(item_buffer, run_repr)
-                item_buffer = []
-        if item_buffer:
-            _add_items(item_buffer, run_repr)
         end_time = datetime.datetime.utcnow()
+
         sr = SeedRun(
             run_repr=run_repr,
             seed_name=seed.name,
@@ -119,7 +127,6 @@ class Pipeline:
             start_time=start_time,
             end_time=end_time,
         )
-
         self._seeds_t.insert(dict(sr))
         return sr
 
@@ -619,3 +626,7 @@ class Pipeline:
             except ItemNotFound:
                 pass
         return rec
+
+
+class MaxSeedItems(Exception):
+    pass
