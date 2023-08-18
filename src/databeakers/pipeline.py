@@ -104,21 +104,26 @@ class Pipeline:
             raise SeedError(f"Seed {seed_name} already run: {already_run}")
 
         start_time = datetime.datetime.utcnow()
-        chunk_size = save_partial_chunks or 500
+        error = ""
 
-        for chunk in chunks(seed.func(), chunk_size):
-            # transaction per chunk
-            with self._db.conn:
-                self._db.execute("BEGIN TRANSACTION;")
-                for item in chunk:
-                    beaker.add_item(item, parent=run_repr, id_=None)
-                    num_items += 1
-                    if num_items == max_items:
-                        break
-            if num_items == max_items:
-                break
+        try:
+            for chunk in chunks(seed.func(), save_partial_chunks):
+                # transaction per chunk
+                with self._db.conn:
+                    self._db.execute("BEGIN TRANSACTION")
+                    for item in chunk:
+                        beaker.add_item(item, parent=run_repr, id_=None)
+                        num_items += 1
+                        if num_items == max_items:
+                            break
+                if num_items == max_items:
+                    break
+        except Exception as e:
+            error = str(e) or repr(e)
+            # tail items won't be saved
+            num_items -= num_items % save_partial_chunks
+
         end_time = datetime.datetime.utcnow()
-
         sr = SeedRun(
             run_repr=run_repr,
             seed_name=seed.name,
@@ -126,6 +131,7 @@ class Pipeline:
             num_items=num_items,
             start_time=start_time,
             end_time=end_time,
+            error=str(error),
         )
         self._seeds_t.insert(dict(sr))
         return sr

@@ -60,7 +60,7 @@ def error_pipeline():
     def error_seed():
         for i in range(90):
             yield Word(word="test")
-        raise ZeroDivisionError()
+        raise ZeroDivisionError("ZeroDivisionError")
 
     p = Pipeline("seeds", ":memory:")
     p.add_beaker("words", Word)
@@ -69,22 +69,31 @@ def error_pipeline():
 
 
 def test_run_seed_partial_chunks(error_pipeline):
-    with pytest.raises(ZeroDivisionError):
-        error_pipeline.run_seed("error_seed")
+    # default is to set a huge checkpoint size, so nothing is saved
+    res = error_pipeline.run_seed("error_seed")
     assert len(error_pipeline.beakers["words"]) == 0
+    assert error_pipeline.get_seed_run("sr:error_seed") == res
+    assert res.num_items == 0
+    assert res.error == "ZeroDivisionError"
 
 
 def test_run_seed_partial_chunks_saved(error_pipeline):
-    with pytest.raises(ZeroDivisionError):
-        error_pipeline.run_seed("error_seed", save_partial_chunks=60)
+    res = error_pipeline.run_seed("error_seed", save_partial_chunks=60)
     assert len(error_pipeline.beakers["words"]) == 60
+    assert res.num_items == 60
+    assert res.error == "ZeroDivisionError"
+    # saved to db
+    assert error_pipeline.get_seed_run("sr:error_seed") == res
 
 
 def test_run_seed_partial_chunks_nothing_saved(error_pipeline):
     # too big of a chunk size, error is raised before commit
-    with pytest.raises(ZeroDivisionError):
-        error_pipeline.run_seed("error_seed", save_partial_chunks=100)
+    res = error_pipeline.run_seed("error_seed", save_partial_chunks=100)
     assert len(error_pipeline.beakers["words"]) == 0
+    assert res.num_items == 0
+    assert res.error == "ZeroDivisionError"
+    # saved to db
+    assert error_pipeline.get_seed_run("sr:error_seed") == res
 
 
 def test_run_two_seeds(pipeline):

@@ -52,12 +52,13 @@ class SeedRun(BaseModel):
     num_items: int
     start_time: datetime.datetime
     end_time: datetime.datetime
+    error: str
 
     def __str__(self):
         duration = self.end_time - self.start_time
         return (
             f"SeedRun({self.run_repr}, seed_name={self.seed_name}, beaker_name={self.beaker_name}, "
-            f"num_items={self.num_items}, duration={duration})"
+            f"num_items={self.num_items}, duration={duration}, error={self.error}))"
         )
 
 
