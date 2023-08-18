@@ -285,7 +285,7 @@ def test_run_async_functions_in_pipeline(mode):
                 Word(word=f"bottom {n}"),
             ]
 
-    async_test = Pipeline("async_test", "async_test.db")
+    async_test = Pipeline("async_test", ":memory:")
     async_test.add_beaker("word", Word)
     async_test.add_beaker("sentence", Sentence)
     async_test.add_transform(
