@@ -112,6 +112,7 @@ class TempBeaker(Beaker):
 
     def reset(self) -> None:
         self._items = {}
+        self._parent_ids = {}
 
     def get_item(self, id: str) -> BaseModel:
         try:
