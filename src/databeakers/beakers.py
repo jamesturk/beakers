@@ -31,7 +31,7 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
-    def id_set(self) -> set[str]:
+    def all_ids(self, ordered: bool = False) -> Iterable[str]:
         """
         Return set of ids.
         """
@@ -90,8 +90,11 @@ class TempBeaker(Beaker):
     def parent_id_set(self) -> set[str]:
         return set(self._parent_ids.values())
 
-    def id_set(self) -> set[str]:
-        return set(self._items.keys())
+    def all_ids(self, ordered: bool = False) -> Iterable[str]:
+        ids: Iterable[str] = self._items.keys()
+        if ordered:
+            ids = sorted(ids)
+        return ids
 
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
@@ -148,8 +151,11 @@ class SqliteBeaker(Beaker):
     def parent_id_set(self) -> set[str]:
         return {row["parent"] for row in self._table.rows}
 
-    def id_set(self) -> set[str]:
-        return {row["uuid"] for row in self._table.rows}
+    def all_ids(self, ordered: bool = False) -> Iterable[str]:
+        ids = [row["uuid"] for row in self._table.rows]
+        if ordered:
+            ids = sorted(ids)
+        return ids
 
     def items(self) -> Iterable[tuple[str, BaseModel]]:
         for item in self._table.rows:

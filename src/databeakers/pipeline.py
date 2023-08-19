@@ -1,10 +1,11 @@
 import inspect
 import asyncio
 import datetime
+import itertools
 import networkx  # type: ignore
 import pydot
 from collections import defaultdict
-from typing import Iterable, Callable, Type, Generator
+from typing import Any, Iterable, Callable, Type, Generator
 from types import UnionType
 from pydantic import BaseModel
 from structlog import get_logger
@@ -368,7 +369,7 @@ class Pipeline:
         for edge in self._out_edges(node):
             from_beaker = self.beakers[node]
             all_upstream = self._all_upstream_ids(edge)
-            already_processed = from_beaker.id_set() & all_upstream
+            already_processed = set(from_beaker.all_ids()) & all_upstream
             node_report["_already_processed"] = len(already_processed)
 
             log.info(
@@ -460,7 +461,7 @@ class Pipeline:
         start_beaker = self.beakers[start_b]
         report.nodes = defaultdict(lambda: defaultdict(int))
 
-        for id in start_beaker.id_set():
+        for id in start_beaker.all_ids():
             # transaction around river runs
             with self._db.conn:
                 record = self._get_full_record(id)
@@ -659,3 +660,36 @@ class Pipeline:
             except ItemNotFound:
                 pass
         return rec
+
+    def _grab_rows(
+        self,
+        beakers: list[str],
+        *,
+        offset: int,
+        max_items: int,
+    ) -> Iterable[dict[str, Any]]:
+        """
+        Grab rows from a list of beakers, joined together.
+        """
+        main_beaker, *aux_beakers = beakers
+
+        # get initial ids
+        beaker = self.beakers[main_beaker]
+        ids: Iterable[str]
+        if offset:
+            # ensure order is consistent if paginating
+            ids = beaker.all_ids(ordered=True)
+        else:
+            ids = beaker.all_ids()
+        if max_items:
+            ids = itertools.islice(ids, offset, offset + max_items)
+
+        for id_ in ids:
+            log.info(f"grabbing id {id_}")
+            record = self._get_full_record(id_)
+            as_dict = dict(record[main_beaker])  # type: ignore
+            for aux_beaker in aux_beakers:
+                for k, v in dict(record[aux_beaker]).items():  # type: ignore
+                    as_dict[f"{aux_beaker}_{k}"] = v
+            as_dict["id"] = id_
+            yield as_dict

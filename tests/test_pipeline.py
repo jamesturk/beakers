@@ -142,7 +142,7 @@ def test_run_fruits(mode):
     sentences = sorted(
         [
             fruits.beakers["sentence"].get_item(id).sentence
-            for id in fruits.beakers["sentence"].id_set()
+            for id in fruits.beakers["sentence"].all_ids()
         ]
     )
 
@@ -307,7 +307,7 @@ def test_run_async_functions_in_pipeline(mode):
 
     sentences = [
         async_test.beakers["sentence"].get_item(id).sentence
-        for id in async_test.beakers["sentence"].id_set()
+        for id in async_test.beakers["sentence"].all_ids()
     ]
 
     assert len(sentences) == 60

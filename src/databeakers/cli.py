@@ -1,5 +1,4 @@
 import importlib
-import itertools
 import time
 import json
 import csv
@@ -111,7 +110,7 @@ def show(
                         edge_string.append(f"\n   -> {edge.to_beaker}", style="green")
 
             # calculate display string for processed
-            processed &= beaker.id_set()
+            processed &= set(beaker.all_ids())
             if temp or first:  # temp beaker or no edges
                 processed_str = Text("-", style="dim")
             elif len(processed):
@@ -293,10 +292,10 @@ def peek(
         t.add_column("UUID", style="cyan")
         for field in beaker.model.model_fields:
             t.add_column(field)
-        for id_, record in itertools.islice(beaker.items(), offset, offset + max_items):
-            fields = [id_]
-            for field in beaker.model.model_fields:
-                value = getattr(record, field)
+        beakers = [thing]
+        for rec in ctx.obj._grab_rows(beakers, offset=offset, max_items=max_items):
+            fields = []
+            for field, value in rec.items():
                 if isinstance(value, str):
                     value = (
                         value[:40] + f"... ({len(value)})" if len(value) > 40 else value
@@ -336,22 +335,13 @@ def export(
     ctx: typer.Context,
     beakers: list[str],
     format: str = typer.Option("json", "--format", "-f"),
-    max_items=typer.Option(None, "--max-items", "-n"),
+    max_items: int = typer.Option(0, "--max-items", "-n"),
+    offset: int = typer.Option(0, "--offset", "-o"),
 ) -> None:
     """
     Export data from beakers.
     """
-    main_beaker, *aux_beakers = beakers
-    beaker = ctx.obj.beakers[main_beaker]
-
-    output = []
-    for id_ in beaker.id_set():
-        record = ctx.obj._get_full_record(id_)
-        as_dict = dict(record[main_beaker])
-        for aux_beaker in aux_beakers:
-            for k, v in dict(record[aux_beaker]).items():
-                as_dict[f"{aux_beaker}_{k}"] = v
-        output.append(as_dict)
+    output = list(ctx.obj._grab_rows(beakers, max_items=max_items, offset=offset))
 
     if format == "json":
         print(json.dumps(output, indent=1))

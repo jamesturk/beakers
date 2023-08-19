@@ -48,13 +48,13 @@ def test_reset(beakerCls):
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
-def test_id_set(beakerCls):
+def test_all_ids(beakerCls):
     pipeline = Pipeline("test", ":memory:")
     beaker = beakerCls("test", Word, pipeline)
     words = [Word(word="one"), Word(word="two")]
     for word in words:
         beaker.add_item(word, parent=None)
-    assert beaker.id_set() == {id for id, _ in beaker.items()}
+    assert set(beaker.all_ids()) == {id for id, _ in beaker.items()}
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
@@ -65,7 +65,7 @@ def test_getitem_basic(beakerCls):
     for word in words:
         beaker.add_item(word, parent=None)
 
-    for id in beaker.id_set():
+    for id in beaker.all_ids():
         assert beaker.get_item(id) in words
 
 

@@ -1,4 +1,5 @@
 import pytest
+import json
 from typer.testing import CliRunner
 from databeakers.cli import app
 from databeakers.pipeline import RunMode
@@ -164,3 +165,28 @@ def test_run_simple():
     assert "word" in result.output
     assert "fruit (2)" in result.output
     assert "sentence (2)" in result.output
+
+
+def test_output_json():
+    fruits.reset()
+
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(
+        app,
+        [
+            "--pipeline",
+            "tests.examples.fruits",
+            "export",
+            "--format",
+            "json",
+            "sentence",
+        ],
+    )
+    assert result.exit_code == 0
+    data = json.loads(result.stdout)
+    assert len(data) == 2
+    assert data[0]["sentence"] == "banana is a delicious fruit."
+    assert data[1]["sentence"] == "apple is a delicious fruit."
