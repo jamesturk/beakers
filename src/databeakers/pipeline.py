@@ -109,9 +109,10 @@ class Pipeline:
             run_repr = f"sr:{seed.name}"
         else:
             # parametrized runs will each have a unique ID per param
-            run_repr = (
-                f"sr:{seed.name}[{','.join(f'{k}={v}' for k, v in parameters.items())}]"
-            )
+            # sort params so they are always in the same order
+            param_order = ",".join(sorted(parameters.keys()))
+            param_order = ",".join(f"{k}={v}" for k, v in sorted(parameters.items()))
+            run_repr = f"sr:{seed.name}[{param_order}]"
         num_items = 0
 
         beaker = self.beakers[seed.beaker_name]

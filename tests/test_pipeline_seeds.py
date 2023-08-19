@@ -49,6 +49,10 @@ def anagrams(word):
         yield Word(word="".join(anagram))
 
 
+def combined(word1, word2):
+    yield Word(word=f"{word1} {word2}")
+
+
 @pytest.fixture
 def anagram_p():
     p = Pipeline("seeds", ":memory:")
@@ -80,6 +84,18 @@ def test_list_seeds_multiple_runs(anagram_p):
     assert test.run_repr == "sr:anagrams[word=test]"
     assert wow.num_items == 6
     assert wow.run_repr == "sr:anagrams[word=wow]"
+
+
+def test_list_seeds_multiple_runs_multiple_parameters(anagram_p):
+    anagram_p.register_seed(combined, "word")
+    anagram_p.run_seed("combined", parameters={"word1": "oh", "word2": "wow"})
+    anagram_p.run_seed("combined", parameters={"word2": "buddy", "word1": "hey"})
+    assert len(anagram_p.list_seeds()["word"]["combined(word1, word2)"]) == 2
+    oh_wow, hey_buddy = anagram_p.list_seeds()["word"]["combined(word1, word2)"]
+    assert oh_wow.num_items == 1
+    assert oh_wow.run_repr == "sr:combined[word1=oh,word2=wow]"
+    assert hey_buddy.num_items == 1
+    assert hey_buddy.run_repr == "sr:combined[word1=hey,word2=buddy]"
 
 
 def test_run_seed(pipeline):
@@ -204,6 +220,15 @@ def test_run_seed_parameters_multiple_runs(anagram_p):
     )
     assert res == anagram_p.get_seed_run("sr:anagrams[word=cat]")
     assert len(anagram_p.beakers["word"]) == 24 + 6
+
+
+def test_run_multiple_parameters_repr(anagram_p):
+    # order should not matter
+    anagram_p.register_seed(combined, "word")
+    res = anagram_p.run_seed("combined", parameters={"word1": "oh", "word2": "wow"})
+    assert res.run_repr == "sr:combined[word1=oh,word2=wow]"
+    res = anagram_p.run_seed("combined", parameters={"word2": "buddy", "word1": "hey"})
+    assert res.run_repr == "sr:combined[word1=hey,word2=buddy]"
 
 
 def test_get_runs_multiple_parameters(anagram_p):
