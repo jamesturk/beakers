@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "databeakers"
-version = "0.2.2"
+version = "0.3.3"
 description = ""
 authors = ["James Turk <dev@jamesturk.net>"]
 readme = "README.md"
@@ -22,6 +22,7 @@ rich = "^13.4.2"
 toml = "^0.10.2"
 pydantic-settings = "^2.0.2"
 pydot = "^1.4.2"
+sqlite-utils = "^3.34"
 
 
 [tool.poetry.group.dev.dependencies]

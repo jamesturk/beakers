@@ -1,6 +1,7 @@
 from databeakers.pipeline import Pipeline
 from databeakers.beakers import TempBeaker
 from examples import Word
+from test_splitter import pipeline as splitter_pipeline  # noqa
 
 
 def test_basic_graph():
@@ -48,5 +49,21 @@ def test_graph_error_nodes():
     assert b"\terror\t[color=red," in dot
     assert b"\tzero_division\t[color=red," in dot
     # error lines
-    assert b"word -> error\t[color=red," in dot
-    assert b"word -> zero_division\t[color=red," in dot
+    print(dot)
+    assert b'"word -> capitalized" -> error\t[color=red,' in dot
+    assert b'"word -> capitalized" -> zero_division\t[color=red,' in dot
+
+
+def test_graph_splitter(splitter_pipeline):  # noqa
+    dot = splitter_pipeline.to_pydot().create_dot()
+    assert b"word\t[color=blue," in dot
+    assert b"animal\t[color=blue," in dot
+    assert b"mineral\t[color=blue," in dot
+    assert b"cryptid\t[color=blue," in dot
+    assert b"splitter_func\t[color=green" in dot
+    assert b"word -> splitter_func" in dot
+    assert b"word -> splitter_func" in dot
+    assert b"word -> splitter_func" in dot
+    assert b"splitter_func -> animal" in dot
+    assert b"splitter_func -> mineral" in dot
+    assert b"splitter_func -> cryptid" in dot

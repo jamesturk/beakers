@@ -12,3 +12,11 @@ class SeedError(DatabeakerError):
 
 class ItemNotFound(DatabeakerError):
     """Raised when an item is not found in a beaker."""
+
+
+class NoEdgeResult(DatabeakerError):
+    """Raised when an edge unexpectedly does not return data."""
+
+
+class BadSplitResult(DatabeakerError):
+    """Raised when a split function returns an invalid mapping."""

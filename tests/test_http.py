@@ -18,7 +18,7 @@ async def test_http_request():
     response = await http_request(URL(url="http://example.com"))
     assert isinstance(response, HttpResponse)
     assert response.status_code == 200
-    assert "example" in response.response_body
+    assert "example" in response.text
     assert response.url == "http://example.com"
 
 
@@ -28,7 +28,7 @@ async def test_http_request_alt_field_name():
     response = await http_request(AltURL(alt_field_name="http://example.com"))
     assert isinstance(response, HttpResponse)
     assert response.status_code == 200
-    assert "example" in response.response_body
+    assert "example" in response.text
     assert response.url == "http://example.com"
     assert repr(http_request) == "HttpRequest(alt_field_name)"
 
@@ -38,7 +38,7 @@ def test_make_http_edge():
     pipeline = Pipeline("http", ":memory:")
     pipeline.add_beaker("start", URL)
     pipeline.add_beaker("response", HttpResponse)
-    pipeline.add_edge("start", "response", make_http_edge("http"))
+    pipeline.add_out_transform("start", make_http_edge("http", "response"))
     # ensure that default error beakers were added
     assert "http_timeout" in pipeline.beakers
     assert "http_error" in pipeline.beakers

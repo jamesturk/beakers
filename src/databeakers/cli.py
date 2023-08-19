@@ -1,7 +1,7 @@
 import importlib
 import time
-import datetime
 import json
+import csv
 import typer
 import sys
 import re
@@ -13,10 +13,13 @@ from rich.live import Live
 from typing import List, Optional
 from typing_extensions import Annotated
 
+
 from ._models import RunMode
 from .exceptions import SeedError, InvalidGraph
 from .config import load_config
 from .pipeline import Pipeline
+from .beakers import TempBeaker
+from .edges import Transform
 
 # TODO: allow re-enabling locals (but is very slow/noisy w/ big text)
 app = typer.Typer(pretty_exceptions_show_locals=False)
@@ -64,50 +67,68 @@ def show(
     """
     Show the current state of the pipeline.
     """
-    pipeline = ctx.obj
 
     def _make_table() -> Table:
-        graph_data = pipeline.graph_data()
         empty_count = 0
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Node")
         table.add_column("Items", justify="right")
+        table.add_column("Processed", justify="right")
         table.add_column("Edges")
-        for node in graph_data:
-            if not empty and not node["len"]:
+        for node in sorted(ctx.obj._beakers_toposort(None)):
+            beaker = ctx.obj.beakers[node]
+            length = len(beaker)
+            if not length and not empty:
                 empty_count += 1
                 continue
             node_style = "dim italic"
-            if not node["temp"]:
-                node_style = "green" if node["len"] else "green dim"
+            temp = True
+            if not isinstance(beaker, TempBeaker):
+                node_style = "green" if length else "green dim"
+                temp = False
             edge_string = Text()
             first = True
-            for edge in node["edges"]:
+            processed = set()
+            for _, _, e in ctx.obj.graph.out_edges(node, data=True):
                 if not first:
                     edge_string.append("\n")
                 first = False
-                edge_string.append(
-                    f"{edge['edge'].name} -> ",
-                    style="cyan",
-                )
-                edge_string.append(
-                    f"{edge['to_beaker']}",
-                    style="green",
-                )
-                if edge["edge"].error_map:
-                    for exceptions, to_beaker in edge["edge"].error_map.items():
+
+                edge = e["edge"]
+                processed |= ctx.obj._all_upstream_ids(edge)
+
+                if isinstance(edge, Transform):
+                    edge_string.append(f"{edge.name} -> {edge.to_beaker}", style="cyan")
+                    for exceptions, to_beaker in edge.error_map.items():
                         edge_string.append(
                             f"\n   {' '.join(e.__name__ for e in exceptions)} -> {to_beaker}",
                             style="yellow",
                         )
+                else:
+                    edge_string.append(f"{edge.name}", style="cyan")
+                    for edge in edge.splitter_map.values():
+                        edge_string.append(f"\n   -> {edge.to_beaker}", style="green")
+
+            # calculate display string for processed
+            processed &= beaker.id_set()
+            if temp or first:  # temp beaker or no edges
+                processed_str = Text("-", style="dim")
+            elif len(processed):
+                processed_str = Text(
+                    f"{len(processed)}  ({len(processed) / length:>4.0%})",
+                    style="green" if len(processed) == length else "yellow",
+                )
+            else:
+                processed_str = Text("0   (  0%)", style="dim red")
             table.add_row(
-                Text(f"{node['name']}", style=node_style),
-                "-" if node["temp"] else str(node["len"]),
+                Text(f"{node}", style=node_style),
+                str(length),
+                processed_str,
                 edge_string,
             )
 
         if empty_count:
-            table.add_row("", "", f"({empty_count} empty beakers hidden)")
+            table.add_row("", "", "", f"\n({empty_count} empty beakers hidden)")
 
         return table
 
@@ -126,6 +147,9 @@ def graph(
     filename: str = typer.Option("graph.svg", "--filename", "-f"),
     excludes: list[str] = typer.Option([], "--exclude", "-e"),
 ) -> None:
+    """
+    Write a graphviz graph of the pipeline to a file.
+    """
     dotg = ctx.obj.to_pydot(excludes)
     if filename.endswith(".svg"):
         dotg.write_svg(filename, prog="dot")
@@ -147,11 +171,13 @@ def seeds(ctx: typer.Context) -> None:
     """
     for beaker, seeds in ctx.obj.list_seeds().items():
         typer.secho(beaker)
-        for seed in seeds:
+        for seed, runs in seeds.items():
             typer.secho(
                 f"  {seed}",
-                fg=typer.colors.GREEN if seed.num_items else typer.colors.YELLOW,
+                fg=typer.colors.GREEN if len(runs) else typer.colors.YELLOW,
             )
+            for run in runs:
+                typer.secho(f"    {run}", fg=typer.colors.GREEN)
 
 
 @app.command()
@@ -165,13 +191,8 @@ def seed(
     Run a seed.
     """
     try:
-        start_time = time.time()
-        num_items = ctx.obj.run_seed(name, num_items, reset)
-        duration = time.time() - start_time
-        duration_dt = datetime.timedelta(seconds=duration)
-        typer.secho(
-            f"Seeded with {num_items} items in {duration_dt}", fg=typer.colors.GREEN
-        )
+        seed_run = ctx.obj.run_seed(name, max_items=num_items, reset=reset)
+        typer.secho(f"Ran seed: {seed_run}", fg=typer.colors.GREEN)
     except SeedError as e:
         typer.secho(f"{e}", fg=typer.colors.RED)
         raise typer.Exit(1)
@@ -257,6 +278,9 @@ def peek(
     ctx: typer.Context,
     thing: Optional[str] = typer.Argument(None),
 ):
+    """
+    Peek at a beaker or record.
+    """
     if not thing:
         typer.secho("Must specify a beaker name or UUID", fg=typer.colors.RED)
         raise typer.Exit(1)
@@ -290,15 +314,15 @@ def peek(
 @app.command()
 def export(
     ctx: typer.Context,
+    beakers: list[str],
     format: str = typer.Option("json", "--format", "-f"),
-    #    fields: Optional[List[str]] = typer.Option(None, "--fields", "-F"),
+    max_items=typer.Option(None, "--max-items", "-n"),
 ) -> None:
     """
     Export data from beakers.
     """
-    main_beaker = "scrapeghost_response"
-    aux_beakers = ["agency"]
-    beaker = ctx.obj.beakers["scrapeghost_response"]
+    main_beaker, *aux_beakers = beakers
+    beaker = ctx.obj.beakers[main_beaker]
 
     output = []
     for id_ in beaker.id_set():
@@ -310,7 +334,11 @@ def export(
         output.append(as_dict)
 
     if format == "json":
-        print(json.dumps(output, indent=2))
+        print(json.dumps(output, indent=1))
+    elif format == "csv":
+        writer = csv.DictWriter(sys.stdout, fieldnames=output[0].keys())
+        writer.writeheader()
+        writer.writerows(output)
 
 
 if __name__ == "__main__":  # pragma: no cover

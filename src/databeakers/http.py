@@ -1,7 +1,7 @@
 import httpx
 from pydantic import BaseModel, Field
 import datetime
-from ._models import Edge, EdgeType
+from .edges import Transform
 
 
 class HttpResponse(BaseModel):
@@ -11,7 +11,7 @@ class HttpResponse(BaseModel):
 
     url: str
     status_code: int
-    response_body: str
+    text: str
     retrieved_at: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
 
@@ -43,12 +43,13 @@ class HttpRequest:
         return HttpResponse(
             url=url,
             status_code=response.status_code,
-            response_body=response.text,
+            text=response.text,
         )
 
 
 def make_http_edge(
     name,
+    to_beaker: str,
     *,
     whole_record: bool = False,
     # HttpRequest args
@@ -57,9 +58,10 @@ def make_http_edge(
     retries: int = 0,
     error_beaker: str = "http_error",
     timeout_beaker: str = "http_timeout",
-) -> Edge:
-    return Edge(
+) -> Transform:
+    return Transform(
         name=name,
+        to_beaker=to_beaker,
         func=HttpRequest(
             field=field, follow_redirects=follow_redirects, retries=retries
         ),
@@ -67,6 +69,6 @@ def make_http_edge(
             (httpx.TimeoutException,): timeout_beaker,
             (httpx.HTTPError,): error_beaker,
         },
-        edge_type=EdgeType.transform,
         whole_record=whole_record,
+        allow_filter=False,
     )

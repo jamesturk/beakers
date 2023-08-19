@@ -28,7 +28,7 @@ class RateLimit:
         else:
             diff = (1 / self.requests_per_second) - (time.time() - self.last_call)
             if diff > 0:
-                log.debug("sleep", seconds=diff)
+                log.debug("RateLimit sleep", seconds=diff, last_call=self.last_call)
                 await asyncio.sleep(diff)
         self.last_call = time.time()
         result = self.edge_func(item)
@@ -56,7 +56,9 @@ class Retry:
                 return await self.edge_func(item)
             except Exception as e:
                 exception = e
-                log.error("retry", exception=str(e), retry=n + 1)
+                log.error(
+                    "Retry", exception=str(e), retry=n + 1, max_retries=self.retries
+                )
         # if we get here, we've exhausted our retries
         # (conditional appeases mypy)
         if exception:
@@ -77,26 +79,24 @@ class Conditional:
         self.edge_func = edge_func
         self.condition = condition
         self.if_false = if_false
+        if if_false not in IfFalse:
+            raise ValueError(f"if_false must be one of {IfFalse}")
 
     def __repr__(self):
         return f"Conditional({callable_name(self.edge_func)}, {callable_name(self.condition)})"
 
     async def __call__(self, item: BaseModel) -> BaseModel:
+        result = self.condition(item)
+        lg = log.bind(conditional=self, result=result)
         if self.condition(item):
-            log.debug("conditional", result=True, conditional=self)
+            lg.info("conditional", edge_func=callable_name(self.edge_func))
             result = self.edge_func(item)
             if inspect.isawaitable(result):
                 return await result
             return result
         elif self.if_false == IfFalse.drop:
-            log.debug(
-                "conditional", result=False, if_false=self.if_false, conditional=self
-            )
+            lg.debug("conditional", if_false=self.if_false)
             return
         elif self.if_false == IfFalse.send:
-            log.debug(
-                "conditional", result=False, if_false=self.if_false, conditional=self
-            )
+            lg.debug("conditional", if_false=self.if_false)
             return item
-        else:
-            raise ValueError(f"Invalid if_false: {self.if_false}")

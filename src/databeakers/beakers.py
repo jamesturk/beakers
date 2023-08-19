@@ -4,6 +4,7 @@ import uuid
 from pydantic import BaseModel
 from typing import Iterable, Type, TYPE_CHECKING
 from structlog import get_logger
+from sqlite_utils.db import NotFoundError
 from .exceptions import ItemNotFound
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -24,15 +25,33 @@ class Beaker(abc.ABC):
         return f"{self.__class__.__name__}({self.name}, {self.model.__name__})"
 
     @abc.abstractmethod
-    def items(self) -> Iterable[tuple[str, BaseModel]]:
-        """
-        Return list of items in the beaker.
-        """
-
-    @abc.abstractmethod
     def __len__(self) -> int:
         """
         Return number of items in the beaker.
+        """
+
+    @abc.abstractmethod
+    def id_set(self) -> set[str]:
+        """
+        Return set of ids.
+        """
+
+    @abc.abstractmethod
+    def parent_id_set(self) -> set[str]:
+        """
+        Return set of parent ids.
+        """
+
+    @abc.abstractmethod
+    def items(self) -> Iterable[tuple[str, BaseModel]]:
+        """
+        Return iterable of items in the beaker.
+        """
+
+    @abc.abstractmethod
+    def get_item(self, id: str) -> BaseModel:
+        """
+        Get an item from the beaker by id.
         """
 
     @abc.abstractmethod
@@ -44,24 +63,6 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
-    def reset(self) -> None:
-        """
-        Reset the beaker to empty.
-        """
-
-    @abc.abstractmethod
-    def get_item(self, id: str) -> BaseModel:
-        """
-        Get an item from the beaker by id.
-        """
-
-    @abc.abstractmethod
-    def parent_id_set(self) -> set[str]:
-        """
-        Return set of parent ids.
-        """
-
-    @abc.abstractmethod
     def delete(self, parent: str) -> int:
         """
         Delete all items with the given parent id.
@@ -70,8 +71,11 @@ class Beaker(abc.ABC):
         """
         return 0
 
-    def id_set(self) -> set[str]:
-        return set(id for id, _ in self.items())
+    @abc.abstractmethod
+    def reset(self) -> None:
+        """
+        Reset the beaker to empty.
+        """
 
 
 class TempBeaker(Beaker):
@@ -83,6 +87,12 @@ class TempBeaker(Beaker):
     def __len__(self) -> int:
         return len(self._items)
 
+    def parent_id_set(self) -> set[str]:
+        return set(self._parent_ids.values())
+
+    def id_set(self) -> set[str]:
+        return set(self._items.keys())
+
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
     ) -> None:
@@ -90,6 +100,7 @@ class TempBeaker(Beaker):
             parent = id_ = str(uuid.uuid1())
         if id_ is None:
             id_ = str(uuid.uuid1())
+        log.debug("add_item", item=item, parent=parent, id=id_, beaker=self.name)
         self._items[id_] = item
         self._parent_ids[id_] = parent
 
@@ -105,9 +116,6 @@ class TempBeaker(Beaker):
         except KeyError:
             raise ItemNotFound(f"{id} not found in {self.name}")
 
-    def parent_id_set(self) -> set[str]:
-        return set(self._parent_ids.values())
-
     def delete(self, parent: str) -> int:
         deleted = 0
         for id, parent_id in self._parent_ids.items():
@@ -122,20 +130,30 @@ class SqliteBeaker(Beaker):
     def __init__(self, name: str, model: PydanticModel, pipeline: "Pipeline"):
         super().__init__(name, model, pipeline)
         # create table if it doesn't exist
-        self.pipeline.db.execute(
-            f"CREATE TABLE IF NOT EXISTS {self.name} "
-            "(uuid TEXT PRIMARY KEY, parent TEXT, data JSON)",
+        self._table = self.pipeline._db[name].create(
+            {
+                "uuid": str,
+                "parent": str,
+                "data": dict,  # JSON
+            },
+            pk="uuid",
+            if_not_exists=True,
         )
-
-    def items(self) -> Iterable[tuple[str, BaseModel]]:
-        cursor = self.pipeline.db.execute(f"SELECT uuid, data FROM {self.name}")
-        data = cursor.fetchall()
-        for item in data:
-            yield item["uuid"], self.model(**json.loads(item["data"]))
+        log.info("beaker initialized", count=self._table.count, name=self.name)
+        # TODO: allow pydantic-to-model here
 
     def __len__(self) -> int:
-        cursor = self.pipeline.db.execute(f"SELECT COUNT(*) FROM {self.name}")
-        return cursor.fetchone()[0]
+        return self._table.count
+
+    def parent_id_set(self) -> set[str]:
+        return {row["parent"] for row in self._table.rows}
+
+    def id_set(self) -> set[str]:
+        return {row["uuid"] for row in self._table.rows}
+
+    def items(self) -> Iterable[tuple[str, BaseModel]]:
+        for item in self._table.rows:
+            yield item["uuid"], self.model(**json.loads(item["data"]))
 
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
@@ -149,32 +167,37 @@ class SqliteBeaker(Beaker):
             parent = id_ = str(uuid.uuid1())
         elif id_ is None:
             id_ = str(uuid.uuid1())
-        log.debug("add_item", item=item, parent=parent, id=id_)
-        self.pipeline.db.execute(
+        log.debug(
+            "add_item",
+            item=item,
+            parent=parent,
+            id=id_,
+            beaker=self.name,
+        )
+        self._table.db.execute(
             f"INSERT INTO {self.name} (uuid, parent, data) VALUES (?, ?, ?)",
             (id_, parent, item.model_dump_json()),
         )
 
-    def reset(self) -> None:
-        self.pipeline.db.execute(f"DELETE FROM {self.name}")
-        self.pipeline.db.commit()
-
     def get_item(self, id: str) -> BaseModel:
-        cursor = self.pipeline.db.execute(
-            f"SELECT data FROM {self.name} WHERE uuid = ?", (id,)
-        )
-        row = cursor.fetchone()
-        if row is None:
+        try:
+            row = self._table.get(id)
+        except NotFoundError:
             raise ItemNotFound(f"{id} not found in {self.name}")
         return self.model(**json.loads(row["data"]))
 
-    def parent_id_set(self) -> set[str]:
-        cursor = self.pipeline.db.execute(f"SELECT parent FROM {self.name}")
-        return set(row["parent"] for row in cursor.fetchall())
+    def reset(self) -> None:
+        log.info("beaker cleared", beaker=self.name)
+        self._table.delete_where()
 
     def delete(self, parent: str) -> int:
-        cursor = self.pipeline.db.execute(
-            f"DELETE FROM {self.name} WHERE parent = ?", (parent,)
+        before = self._table.count
+        self._table.delete_where("parent=?", (parent,))
+        after = self._table.count
+        log.info(
+            "beaker delete where",
+            beaker=self.name,
+            parent=parent,
+            deleted=before - after,
         )
-        self.pipeline.db.commit()
-        return cursor.rowcount
+        return before - after

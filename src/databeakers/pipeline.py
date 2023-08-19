@@ -1,30 +1,25 @@
 import inspect
-import sqlite3
 import asyncio
 import datetime
 import networkx  # type: ignore
 import pydot
 from collections import defaultdict
-from collections.abc import Generator, AsyncGenerator
-from typing import Iterable, Callable, Type
+from typing import Iterable, Callable, Type, Generator
+from types import UnionType
 from pydantic import BaseModel
 from structlog import get_logger
+from sqlite_utils import Database
+from sqlite_utils.utils import chunks
 
 from ._record import Record
-from ._models import Edge, EdgeType, RunMode, RunReport, Seed
-from ._utils import callable_name
+from ._models import RunMode, RunReport, ErrorType, SeedRun, Seed
+from ._utils import callable_name, pydantic_to_schema, pyd_wrap
 from .beakers import Beaker, SqliteBeaker, TempBeaker
+from .edges import Transform, Edge, Splitter, DEST_STOP
 from .exceptions import ItemNotFound, SeedError, InvalidGraph
 
 
 log = get_logger()
-
-
-# not in models because it is used externally
-class ErrorType(BaseModel):
-    item: BaseModel
-    exception: str
-    exc_type: str
 
 
 class Pipeline:
@@ -33,26 +28,139 @@ class Pipeline:
         self.num_workers = num_workers
         self.graph = networkx.DiGraph()
         self.beakers: dict[str, Beaker] = {}
-        self.seeds: dict[str, tuple[str, Callable[[], Iterable[BaseModel]]]] = {}
-        self.db = sqlite3.connect(db_name)
-        self.db.row_factory = sqlite3.Row  # type: ignore
-        cursor = self.db.cursor()
-        cursor.execute(
-            """CREATE TABLE IF NOT EXISTS _seeds (
-                name TEXT, 
-                beaker_name TEXT,
-                num_items INTEGER,
-                imported_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )"""
+        self.seeds: dict[str, Seed] = {}
+        self._db = Database(memory=True) if db_name == ":memory:" else Database(db_name)
+        self._db.enable_wal()
+        self._db.execute("PRAGMA synchronous=1;")
+        self._db.conn.isolation_level = None
+        self._seeds_t = self._db.table("_seed_runs").create(
+            pydantic_to_schema(SeedRun),
+            pk="run_repr",
+            if_not_exists=True,
         )
-        cursor.execute("PRAGMA journal_mode=WAL;")
-        cursor.execute("PRAGMA synchronous=1;")
-        # result = cursor.fetchone()
-        # if tuple(result)[0] != "wal":
-        #     raise SystemError(f"Unable to set WAL mode {result[0]}")
 
     def __repr__(self) -> str:
         return f"Pipeline({self.name})"
+
+    # section: seeds ##########################################################
+
+    def register_seed(
+        self,
+        callable: Callable[[], Iterable[BaseModel]],
+        beaker_name: str,
+        seed_name: str = "",
+    ):
+        name = seed_name or callable_name(callable)
+        self.seeds[name] = Seed(name=name, func=callable, beaker_name=beaker_name)
+
+    def list_seeds(self) -> dict[str, dict[str, list]]:
+        """
+        Create list of seeds and runs, suitable for output.
+        """
+        # without defaultdict so return type is clear
+        by_beaker: dict[str, dict[str, list]] = {}
+        for seed in self.seeds.values():
+            if seed.beaker_name not in by_beaker:
+                by_beaker[seed.beaker_name] = {}
+            by_beaker[seed.beaker_name][seed.display_name] = self.get_seed_runs(
+                seed_name=seed.name
+            )
+        return by_beaker
+
+    def get_seed_runs(self, seed_name: str) -> list[SeedRun]:
+        return list(
+            pyd_wrap(self._seeds_t.rows_where("seed_name = ?", [seed_name]), SeedRun)
+        )
+
+    def get_seed_run(self, run_repr: str) -> SeedRun | None:
+        try:
+            return list(
+                pyd_wrap(self._seeds_t.rows_where("run_repr = ?", [run_repr]), SeedRun)
+            )[0]
+        except IndexError:
+            return None
+
+    def run_seed(
+        self,
+        seed_name: str,
+        *,
+        max_items: int = 0,
+        reset=False,
+        chunk_size=100,
+        save_bad_runs=True,
+        parameters: dict[str, str] | None = None,
+    ):
+        """
+        Args:
+            seed_name: name of seed to run
+            max_items: maximum number of items to process
+            reset: whether to reset the beaker before running
+            chunk_size: number of items to add to beaker per transaction
+            save_bad_runs: whether to save runs that fail
+            parameters: parameters to pass to seed function
+        """
+        try:
+            seed = self.seeds[seed_name]
+        except KeyError:
+            raise SeedError(f"Seed {seed_name} not found")
+
+        if parameters is None:
+            parameters = {}
+            run_repr = f"sr:{seed.name}"
+        else:
+            # parametrized runs will each have a unique ID per param
+            run_repr = (
+                f"sr:{seed.name}[{','.join(f'{k}={v}' for k, v in parameters.items())}]"
+            )
+        num_items = 0
+
+        beaker = self.beakers[seed.beaker_name]
+        if reset:
+            beaker.reset()
+            self._seeds_t.delete_where("run_repr = ?", [run_repr])
+
+        if already_run := self.get_seed_run(run_repr):
+            raise SeedError(f"Seed {seed_name} already run: {already_run}")
+
+        start_time = datetime.datetime.utcnow()
+        error = ""
+
+        try:
+            for chunk in chunks(seed.func(**parameters), chunk_size):
+                # transaction per chunk
+                with self._db.conn:
+                    self._db.execute("BEGIN TRANSACTION")
+                    for item in chunk:
+                        beaker.add_item(item, parent=run_repr, id_=None)
+                        num_items += 1
+                        if num_items == max_items:
+                            break
+                if num_items == max_items:
+                    break
+        except Exception as e:
+            error = str(e) or repr(e)
+
+            if not save_bad_runs:
+                # need to delete the beaker items
+                beaker.delete(run_repr)
+                num_items = 0
+            else:
+                # tail items won't be saved
+                num_items -= num_items % chunk_size
+
+        end_time = datetime.datetime.utcnow()
+        sr = SeedRun(
+            run_repr=run_repr,
+            seed_name=seed.name,
+            beaker_name=seed.beaker_name,
+            num_items=num_items,
+            start_time=start_time,
+            end_time=end_time,
+            error=str(error),
+        )
+        if save_bad_runs or not error:
+            self._seeds_t.insert(dict(sr))
+        return sr
 
     # section: graph ##########################################################
 
@@ -62,7 +170,7 @@ class Pipeline:
         datatype: Type[BaseModel],
         beaker_type: Type[Beaker] = SqliteBeaker,
     ) -> Beaker:
-        self.graph.add_node(name, datatype=datatype)
+        self.graph.add_node(name, datatype=datatype, node_type="beaker")
         self.beakers[name] = beaker_type(name, datatype, self)
         return self.beakers[name]
 
@@ -73,22 +181,21 @@ class Pipeline:
         func: Callable,
         *,
         name: str | None = None,
-        edge_type: EdgeType = EdgeType.transform,
         error_map: dict[tuple, str] | None = None,
         whole_record: bool = False,
+        allow_filter: bool = True,
     ) -> None:
-        if name is None:
-            name = callable_name(func)
-        edge = Edge(
+        edge = Transform(
             name=name,
-            edge_type=edge_type,
             func=func,
+            to_beaker=to_beaker,
             error_map=error_map or {},
             whole_record=whole_record,
+            allow_filter=allow_filter,
         )
-        self.add_edge(from_beaker, to_beaker, edge)
+        self.add_out_transform(from_beaker, edge)
 
-    def add_edge(self, from_beaker: str, to_beaker: str, edge: Edge) -> None:
+    def add_out_transform(self, from_beaker: str, edge: Edge) -> None:
         """
         Declaration Rules:
         - from_beaker must exist
@@ -96,7 +203,6 @@ class Pipeline:
         - edge.func must take a single parameter
         - edge.func parameter must be a subclass of from_beaker
         - edge.func must return to_beaker or None
-        - edge.func must return bool if edge_type is conditional
         - edge.error_map must be a dict of (exception,) -> beaker_name
         - edge.error_map beakers will be created if they don't exist
         """
@@ -105,6 +211,7 @@ class Pipeline:
         if from_beaker not in self.beakers:
             raise InvalidGraph(f"{from_beaker} not found")
         from_model = self.beakers[from_beaker].model
+
         signature = inspect.signature(edge.func)
         param_annotations = [p.annotation for p in signature.parameters.values()]
         if len(param_annotations) != 1:
@@ -141,42 +248,41 @@ class Pipeline:
             )
 
         # check to/return type
-        if to_beaker not in self.beakers:
+        if edge.to_beaker not in self.beakers:
             if signature.return_annotation == inspect.Signature.empty:
                 raise InvalidGraph(
-                    f"{to_beaker} not found & no return annotation on edge function to infer type"
+                    f"{edge.to_beaker} not found & no return annotation on edge function to "
+                    "infer type"
                 )
             else:
                 to_model = signature.return_annotation
-                self.add_beaker(to_beaker, to_model)
+                self.add_beaker(edge.to_beaker, to_model)
                 log.debug(
-                    "implicit beaker", beaker=to_beaker, datatype=to_model.__name__
+                    "implicit beaker", beaker=edge.to_beaker, datatype=to_model.__name__
                 )
         else:
-            to_model = self.beakers[to_beaker].model
+            to_model = self.beakers[edge.to_beaker].model
             if signature.return_annotation == inspect.Signature.empty:
                 log.warning(
                     "no return annotation on edge function",
                     func=edge.func,
                     name=edge.name,
                 )
-            elif edge.edge_type == EdgeType.transform:
+            else:
                 ret_ann = signature.return_annotation
-                if ret_ann.__name__ in ("Generator", "AsyncGenerator"):
-                    ret_ann = ret_ann.__args__[0]
-                if not issubclass(to_model, ret_ann):
-                    raise InvalidGraph(
-                        f"{edge.name} returns {signature.return_annotation.__name__}, "
-                        f"{to_beaker} expects {to_model.__name__}"
-                    )
-            elif (
-                edge.edge_type == EdgeType.conditional
-                and signature.return_annotation != bool
-            ):
-                raise InvalidGraph(
-                    f"{edge.name} returns {signature.return_annotation.__name__}, "
-                    "conditional edges must return bool"
-                )
+                # check if union type
+                if type(ret_ann) == UnionType:
+                    return_types = [rt for rt in ret_ann.__args__ if rt != type(None)]
+                elif ret_ann.__name__ in ("Generator", "AsyncGenerator"):
+                    return_types = [ret_ann.__args__[0]]
+                else:
+                    return_types = [ret_ann]
+                for rt in return_types:
+                    if not issubclass(to_model, rt):
+                        raise InvalidGraph(
+                            f"{edge.name} returns {rt.__name__}, "
+                            f"{edge.to_beaker} expects {to_model.__name__}"
+                        )
 
         # check error beakers
         for err_b in edge.error_map.values():
@@ -191,103 +297,19 @@ class Pipeline:
 
         self.graph.add_edge(
             from_beaker,
-            to_beaker,
+            edge.to_beaker,
             edge=edge,
         )
 
-    # section: seeds ##########################################################
-
-    def add_seed(
-        self,
-        seed_name: str,
-        beaker_name: str,
-        seed_func: Callable[[], Iterable[BaseModel]],
-    ) -> None:
-        self.seeds[seed_name] = (beaker_name, seed_func)
-
-    def list_seeds(self) -> dict[str, list[Seed]]:
-        by_beaker = defaultdict(list)
-        for seed_name, (beaker_name, _) in self.seeds.items():
-            seed = self._db_get_seed(seed_name)
-            if not seed:
-                seed = Seed(name=seed_name)
-            by_beaker[beaker_name].append(seed)
-        return dict(by_beaker)
-
-    def _db_get_seed(self, seed_name: str) -> Seed | None:
-        cursor = self.db.cursor()
-        cursor.row_factory = sqlite3.Row  # type: ignore
-        cursor.execute("SELECT * FROM _seeds WHERE name = ?", (seed_name,))
-        if row := cursor.fetchone():
-            return Seed(**row)
-        else:
-            return None
-
-    def run_seed(self, seed_name: str, max_items: int = 0, reset: bool = False) -> int:
-        try:
-            beaker_name, seed_func = self.seeds[seed_name]
-        except KeyError:
-            raise SeedError(f"Seed {seed_name} not found")
-        beaker = self.beakers[beaker_name]
-
-        num_items = 0
-        parent_id = f"seed:{seed_name}"
-        # transaction around seed
-        with self.db:
-            if reset:
-                beaker.delete(parent=parent_id)
-                self.db.execute("DELETE FROM _seeds WHERE name = ?", (seed_name,))
-
-            if seed := self._db_get_seed(seed_name):
-                raise SeedError(f"{seed_name} already run at {seed.imported_at}")
-
-            for item in seed_func():
-                beaker.add_item(item, parent=parent_id)
-                num_items += 1
-                if max_items and num_items >= max_items:
-                    break
-            self.db.execute(
-                "INSERT INTO _seeds (name, beaker_name, num_items) VALUES (?, ?, ?)",
-                (seed_name, beaker_name, num_items),
+    def add_splitter(self, from_beaker: str, splitter: Splitter) -> None:
+        self.graph.add_node(splitter.name, node_type="split")
+        self.graph.add_edge(from_beaker, splitter.name, edge=splitter)
+        for out in splitter.splitter_map.values():
+            self.graph.add_edge(
+                splitter.name,
+                out.to_beaker,
+                edge=splitter,
             )
-
-        return num_items
-
-    # section: commands #######################################################
-
-    def reset(self) -> list[str]:
-        reset_list = []
-        # transaction around entire reset
-        with self.db:
-            cursor = self.db.cursor()
-            res = cursor.execute("DELETE FROM _seeds")
-            if res.rowcount:
-                reset_list.append(f"{res.rowcount} seeds")
-            for beaker in self.beakers.values():
-                if bl := len(beaker):
-                    beaker.reset()
-                    reset_list.append(f"{beaker.name} ({bl})")
-        return reset_list
-
-    def graph_data(self) -> list[dict]:
-        nodes = {}
-
-        for node in networkx.topological_sort(self.graph):
-            beaker = self.beakers[node]
-
-            nodes[node] = {
-                "name": node,
-                "temp": isinstance(beaker, TempBeaker),
-                "len": len(beaker),
-                "edges": [],
-            }
-
-            for _, to_b, edge in self.graph.out_edges(node, data=True):
-                edge["to_beaker"] = to_b
-                nodes[node]["edges"].append(edge)
-
-        # all data collected for display
-        return sorted(nodes.values(), key=lambda x: x["name"])
 
     # section: running ########################################################
 
@@ -315,7 +337,6 @@ class Pipeline:
             run_mode=run_mode,
             nodes={},
         )
-        log.info("run", pipeline=self)
 
         # go through each node in forward order
         if run_mode == RunMode.waterfall:
@@ -328,34 +349,11 @@ class Pipeline:
     def _run_waterfall(
         self, only_beakers: list[str] | None, report: RunReport
     ) -> RunReport:
-        for node in networkx.topological_sort(self.graph):
-            if only_beakers and node not in only_beakers:
-                continue
+        for node in self._beakers_toposort(only_beakers):
             # push data from this node to downstream nodes
             report.nodes[node] = self._run_node_waterfall(node)
 
         return report
-
-    def _get_full_record(self, id: str) -> Record:
-        """
-        Get the full record for a given id.
-
-        This isn't the most efficient, but for waterfall runs
-        the alternative is to store all records in memory.
-        """
-        rec = Record(id=id)
-        for beaker_name, beaker in self.beakers.items():
-            try:
-                rec[beaker_name] = beaker.get_item(id)
-            except ItemNotFound:
-                pass
-        return rec
-
-    def _all_upstream(self, to_beaker: Beaker, edge: Edge):
-        all_upstream = to_beaker.parent_id_set()
-        for error_b in edge.error_map.values():
-            all_upstream |= self.beakers[error_b].id_set()
-        return all_upstream
 
     def _run_node_waterfall(self, node: str) -> dict[str, int]:
         """
@@ -366,27 +364,21 @@ class Pipeline:
         node_report: dict[str, int] = defaultdict(int)
 
         # get outbound edges
-        edges = self.graph.out_edges(node, data=True)
-        for from_b, to_b, e in edges:
-            from_beaker = self.beakers[from_b]
-            to_beaker = self.beakers[to_b]
-            edge = e["edge"]
-            all_upstream = self._all_upstream(to_beaker, edge)
+        for edge in self._out_edges(node):
+            from_beaker = self.beakers[node]
+            all_upstream = self._all_upstream_ids(edge)
             already_processed = from_beaker.id_set() & all_upstream
-            node_report["_already_processed"] += len(already_processed)
+            node_report["_already_processed"] = len(already_processed)
 
             log.info(
                 "processing edge",
                 from_b=from_beaker.name,
-                to_b=to_beaker.name,
                 edge=edge.name,
                 to_process=len(from_beaker) - len(already_processed),
                 already_processed=len(already_processed),
             )
             partial_result = loop.run_until_complete(
-                self._run_edge_waterfall(
-                    from_beaker, to_beaker, edge, already_processed
-                )
+                self._run_edge_waterfall(from_beaker, edge, already_processed)
             )
             for k, v in partial_result.items():
                 node_report[k] += v
@@ -396,7 +388,6 @@ class Pipeline:
     async def _run_edge_waterfall(
         self,
         from_beaker: Beaker,
-        to_beaker: Beaker,
         edge: Edge,
         already_processed: set[str],
     ) -> dict[str, int]:
@@ -423,9 +414,9 @@ class Pipeline:
 
                 try:
                     # transaction around each waterfall step
-                    with self.db:
+                    with self._db.conn:
                         result_loc = await self._run_edge_func(
-                            from_beaker.name, edge, to_beaker, id, item=item
+                            from_beaker.name, edge, id, item=item
                         )
                     node_report[result_loc] += 1
                 except Exception:
@@ -462,10 +453,7 @@ class Pipeline:
         loop = asyncio.new_event_loop()
 
         # start beaker is the first beaker in the topological sort that's in only_beakers
-        topo_order = list(networkx.topological_sort(self.graph))
-        if only_beakers:
-            topo_order = [b for b in topo_order if b in only_beakers]
-        start_b = topo_order[0]
+        start_b = list(self._beakers_toposort(only_beakers))[0]
         log.debug("starting river run", start_beaker=start_b, only_beakers=only_beakers)
 
         start_beaker = self.beakers[start_b]
@@ -473,7 +461,7 @@ class Pipeline:
 
         for id in start_beaker.id_set():
             # transaction around river runs
-            with self.db:
+            with self._db.conn:
                 record = self._get_full_record(id)
                 log.debug("river record", id=id)
                 for from_b, to_b in loop.run_until_complete(
@@ -487,7 +475,6 @@ class Pipeline:
         self,
         cur_b: str,
         edge: Edge,
-        to_beaker: Beaker,
         id: str,
         *,
         item: BaseModel | None = None,
@@ -502,85 +489,28 @@ class Pipeline:
 
         Returns: result_beaker_name
         """
-        try:
-            if edge.whole_record:
-                if record is None:
-                    record = self._get_full_record(id)
-                result = edge.func(record)
-            else:
-                if item is None and record:
-                    item = record[cur_b]
-                result = edge.func(item)
-            if inspect.isawaitable(result):
-                result = await result
-            if record:
-                record[to_beaker.name] = result
-        except Exception as e:
-            lg = log.bind(
-                exception=repr(e),
-                edge=edge,
-                id=id,
-                item=item,
-            )
-            for (
-                error_types,
-                error_beaker_name,
-            ) in edge.error_map.items():
-                if isinstance(e, error_types):
-                    lg.info("error handled", error_beaker=error_beaker_name)
-                    error_beaker = self.beakers[error_beaker_name]
-                    error_beaker.add_item(
-                        ErrorType(
-                            item=item,
-                            exception=str(e),
-                            exc_type=str(type(e)),
-                        ),
-                        parent=id,
-                        id_=id,
-                    )
-                    return error_beaker.name
-            else:
-                # no error handler, re-raise
-                log.critical("unhandled error")
-                raise
 
-        # propagate result to downstream beakers
-        match edge.edge_type:
-            case EdgeType.transform:
-                # transform: add result to to_beaker (if not None)
-                if isinstance(result, (Generator, AsyncGenerator)):
-                    num_yielded = 0
-                    if isinstance(result, Generator):
-                        for i in result:
-                            to_beaker.add_item(i, parent=id, id_=None)
-                            num_yielded += 1
-                    else:
-                        async for i in result:
-                            to_beaker.add_item(i, parent=id, id_=None)
-                            num_yielded += 1
-                    log.info(
-                        "generator yielded",
-                        edge=edge,
-                        id=id,
-                        num_yielded=num_yielded,
-                        to_beaker=to_beaker.name,
-                    )
-                    to_beaker_name = to_beaker.name if num_yielded else "_none"
-                elif result is not None:
-                    to_beaker.add_item(result, parent=id, id_=id)
-                    to_beaker_name = to_beaker.name
-                else:
-                    to_beaker_name = "_none"
-            case EdgeType.conditional:
-                # conditional: add item to to_beaker if e_func returns truthy
-                if result:
-                    to_beaker.add_item(item, parent=id, id_=id)
-                    to_beaker_name = to_beaker.name
-                else:
-                    to_beaker_name = "_none"
-            case _:  # pragma: no cover
-                raise ValueError(f"Unknown edge type {edge.edge_type}")
-        return to_beaker_name
+        # figure out what is going to be passed in
+        data: BaseModel | Record | None = None
+        if edge.whole_record:
+            data = record if record is not None else self._get_full_record(id)
+            record = data
+        else:
+            data = item
+            if data is None and record:
+                data = record[cur_b]
+
+        # run the edge function & push results to dest beakers
+        async for e_result in edge._run(id, data):
+            if e_result.dest == DEST_STOP:
+                return DEST_STOP
+            else:
+                beaker = self.beakers[e_result.dest]
+                beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
+
+        if record:
+            record[e_result.dest] = e_result.data
+        return e_result.dest
 
     async def _run_one_item_river(
         self, record: Record, cur_b: str, only_beakers: list[str] | None = None
@@ -596,18 +526,15 @@ class Pipeline:
         from_to = []
 
         # fan an item out to all downstream beakers
-        for _, to_b, e in self.graph.out_edges(cur_b, data=True):
-            edge = e["edge"]
-            to_beaker = self.beakers[to_b]
-
+        for edge in self._out_edges(cur_b):
             # TODO: cache this upstream set?
-            if record.id in self._all_upstream(to_beaker, edge):
+            if record.id in self._all_upstream_ids(edge):
                 from_to.append((cur_b, "_already_processed"))
                 # already processed this item, nothing to do
                 continue
 
             result_beaker = await self._run_edge_func(
-                cur_b, edge, to_beaker, record.id, record=record
+                cur_b, edge, record.id, record=record
             )
             from_to.append((cur_b, result_beaker))
             if only_beakers and result_beaker not in only_beakers:
@@ -625,7 +552,7 @@ class Pipeline:
                     only_beakers=only_beakers,
                 )
 
-        log.info(
+        log.debug(
             "river subtasks",
             cur_b=cur_b,
             subtasks=len(subtasks),
@@ -640,6 +567,20 @@ class Pipeline:
 
         return from_to
 
+    # section: commands #######################################################
+
+    def reset(self) -> list[str]:
+        reset_list = []
+        # transaction around entire reset
+        with self._db.conn:
+            self._seeds_t.delete_where("1=1")
+            #    reset_list.append(f"seeds ({seed_count})")
+            for beaker in self.beakers.values():
+                if bl := len(beaker):
+                    beaker.reset()
+                    reset_list.append(f"{beaker.name} ({bl})")
+        return reset_list
+
     def to_pydot(self, excludes: list[str] | None = None):
         if excludes is None:
             excludes = []
@@ -653,18 +594,67 @@ class Pipeline:
                 pydg.add_node(pydot.Node(b.name, color="grey"))
             else:
                 pydg.add_node(pydot.Node(b.name, color="blue"))
+
         for from_b, to_b, e in self.graph.edges(data=True):
             edge = e["edge"]
-            pydg.add_edge(pydot.Edge(from_b, to_b, label=edge.name))
-            for error_types, error_beaker_name in edge.error_map.items():
-                if error_beaker_name not in excludes:
-                    pydg.add_edge(
-                        pydot.Edge(
-                            from_b,
-                            error_beaker_name,
-                            label=f"errors: {error_types}",
-                            color="red",
-                            samehead=error_beaker_name,
-                        )
+            if isinstance(edge, Transform):
+                edge_name = f"{from_b} -> {to_b}"
+                pydg.add_node(
+                    pydot.Node(
+                        edge_name, color="lightblue", shape="rect", label=edge.name
                     )
+                )
+                pydg.add_edge(pydot.Edge(from_b, edge_name))
+                pydg.add_edge(pydot.Edge(edge_name, to_b))
+                for _, error_beaker_name in edge.error_map.items():
+                    if error_beaker_name not in excludes:
+                        pydg.add_edge(
+                            pydot.Edge(
+                                edge_name,
+                                error_beaker_name,
+                                color="red",
+                                samehead=error_beaker_name,
+                            )
+                        )
+            elif isinstance(edge, Splitter):
+                pydg.add_node(pydot.Node(edge.name, color="green", shape="diamond"))
+                pydg.add_edge(pydot.Edge(from_b, to_b))
         return pydg
+
+    # section: helper methods ################################################
+
+    def _beakers_toposort(
+        self, only_beakers: list[str] | None
+    ) -> Generator[str, None, None]:
+        for node in networkx.topological_sort(self.graph):
+            if self.graph.nodes[node]["node_type"] == "split":
+                continue
+            elif only_beakers and node not in only_beakers:
+                continue
+            else:
+                yield node
+
+    def _out_edges(self, cur_b):
+        for _, _, e in self.graph.out_edges(cur_b, data=True):
+            yield e["edge"]
+
+    def _all_upstream_ids(self, edge: Edge):
+        all_upstream = set()
+        for error_b in edge.out_beakers():
+            all_upstream |= self.beakers[error_b].parent_id_set()
+        return all_upstream
+
+    def _get_full_record(self, id: str) -> Record:
+        """
+        Get the full record for a given id.
+
+        This isn't the most efficient, but for waterfall runs
+        the alternative is to store all records in memory.
+        """
+        rec = Record(id=id)
+        for beaker_name, beaker in self.beakers.items():
+            try:
+                rec[beaker_name] = beaker.get_item(id)
+            except ItemNotFound:
+                pass
+        return rec

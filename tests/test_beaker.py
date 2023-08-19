@@ -1,5 +1,5 @@
 import pytest
-from databeakers import Pipeline
+from databeakers.pipeline import Pipeline
 from databeakers.beakers import TempBeaker, SqliteBeaker
 from databeakers.exceptions import ItemNotFound
 from examples import Word

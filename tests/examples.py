@@ -1,4 +1,3 @@
-from databeakers._models import EdgeType
 from pydantic import BaseModel
 from databeakers.pipeline import Pipeline
 from databeakers.beakers import TempBeaker
@@ -16,12 +15,12 @@ class Sentence(BaseModel):
     sentence: str
 
 
-def is_fruit(word: Word) -> bool:
+def is_fruit(word: Word) -> IdOnly | None:
     if word.word == "error":
         raise ValueError("error")
     elif word.word == "/0":
         raise ZeroDivisionError("zero")
-    return word.word in {
+    if word.word in {
         "apple",
         "banana",
         "cherry",
@@ -42,7 +41,9 @@ def is_fruit(word: Word) -> bool:
         "strawberry",
         "tangerine",
         "watermelon",
-    }
+    }:
+        return IdOnly()
+    return None
 
 
 fruits = Pipeline("fruits", "fruits_test.db")
@@ -60,7 +61,6 @@ fruits.add_transform(
     "normalized",
     "fruit",
     is_fruit,
-    edge_type=EdgeType.conditional,
     error_map={(ValueError,): "errors"},
 )
 fruits.add_transform(
@@ -69,11 +69,13 @@ fruits.add_transform(
     lambda r: Sentence(sentence=f"{r['normalized'].word} is a delicious fruit."),
     whole_record=True,
 )
-fruits.add_seed(
-    "abc",
-    "word",
+fruits.register_seed(
     lambda: [Word(word="apple"), Word(word="BANANA"), Word(word="cat")],
+    "word",
+    seed_name="abc",
 )
-fruits.add_seed(
-    "errors", "word", lambda: [Word(word=100), Word(word="pear"), Word(word="ERROR")]
+fruits.register_seed(
+    lambda: [Word(word=100), Word(word="pear"), Word(word="ERROR")],
+    "word",
+    seed_name="errors",
 )
