@@ -233,3 +233,17 @@ def test_output_csv():
         result.stdout
         == "id,sentence\n1,apple is a delicious fruit.\n2,pineapple is a delicious fruit.\n"
     )
+
+
+def test_peek_beaker():
+    fruits.reset()
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    assert len(fruits.beakers["word"]) == 3
+
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "peek", "word"])
+    assert result.exit_code == 0
+    print(result.output)
+    assert "word (3) " in result.output
+    assert "apple" in result.output
+    assert "BANANA" in result.output
+    assert "cat" in result.output
