@@ -85,7 +85,7 @@ class Pipeline:
         reset=False,
         chunk_size=100,
         save_bad_runs=True,
-        **kwargs,
+        parameters: dict[str, str] | None = None,
     ):
         """
         Args:
@@ -94,14 +94,21 @@ class Pipeline:
             reset: whether to reset the beaker before running
             chunk_size: number of items to add to beaker per transaction
             save_bad_runs: whether to save runs that fail
+            parameters: parameters to pass to seed function
         """
         try:
             seed = self.seeds[seed_name]
         except KeyError:
             raise SeedError(f"Seed {seed_name} not found")
 
-        # TODO: improve this
-        run_repr = f"sr:{seed.name}"
+        if parameters is None:
+            parameters = {}
+            run_repr = f"sr:{seed.name}"
+        else:
+            # parametrized runs will each have a unique ID per param
+            run_repr = (
+                f"sr:{seed.name}[{','.join(f'{k}={v}' for k, v in parameters.items())}]"
+            )
         num_items = 0
 
         beaker = self.beakers[seed.beaker_name]
@@ -116,7 +123,7 @@ class Pipeline:
         error = ""
 
         try:
-            for chunk in chunks(seed.func(), chunk_size):
+            for chunk in chunks(seed.func(**parameters), chunk_size):
                 # transaction per chunk
                 with self._db.conn:
                     self._db.execute("BEGIN TRANSACTION")

@@ -341,12 +341,6 @@ def test_run_async_generator_func(mode):
         for perm in itertools.permutations(str(word.word)):
             yield Word(word="".join(perm))
 
-    def words_seed() -> Generator[Word, None, None]:
-        yield from [
-            Word(word="cat"),
-            Word(word="dog"),
-        ]
-
     p = Pipeline("test", ":memory:")
     p.add_beaker("word", Word)
     p.add_beaker("anagram", Word)

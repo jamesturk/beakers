@@ -1,4 +1,5 @@
 import pytest
+import itertools
 from databeakers.pipeline import Pipeline
 from databeakers.exceptions import SeedError
 from examples import Word
@@ -145,3 +146,19 @@ def test_get_run(pipeline):
     assert run.num_items == 5
     assert run.start_time is not None
     assert run.end_time is not None
+
+
+def anagrams(word):
+    for anagram in itertools.permutations(word):
+        yield Word(word="".join(anagram))
+
+
+def test_run_seed_parameters_basic():
+    p = Pipeline("seeds", ":memory:")
+    p.add_beaker("word", Word)
+    p.register_seed(anagrams, "word")
+    res = p.run_seed("anagrams", parameters={"word": "test"}, save_bad_runs=False)
+
+    assert p.get_seed_run("sr:anagrams") is None
+    assert res == p.get_seed_run("sr:anagrams[word=test]")
+    assert len(p.beakers["word"]) == 24
