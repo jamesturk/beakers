@@ -31,9 +31,27 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
+    def id_set(self) -> set[str]:
+        """
+        Return set of ids.
+        """
+
+    @abc.abstractmethod
+    def parent_id_set(self) -> set[str]:
+        """
+        Return set of parent ids.
+        """
+
+    @abc.abstractmethod
     def items(self) -> Iterable[tuple[str, BaseModel]]:
         """
         Return iterable of items in the beaker.
+        """
+
+    @abc.abstractmethod
+    def get_item(self, id: str) -> BaseModel:
+        """
+        Get an item from the beaker by id.
         """
 
     @abc.abstractmethod
@@ -45,24 +63,6 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
-    def reset(self) -> None:
-        """
-        Reset the beaker to empty.
-        """
-
-    @abc.abstractmethod
-    def get_item(self, id: str) -> BaseModel:
-        """
-        Get an item from the beaker by id.
-        """
-
-    @abc.abstractmethod
-    def parent_id_set(self) -> set[str]:
-        """
-        Return set of parent ids.
-        """
-
-    @abc.abstractmethod
     def delete(self, parent: str) -> int:
         """
         Delete all items with the given parent id.
@@ -71,8 +71,11 @@ class Beaker(abc.ABC):
         """
         return 0
 
-    def id_set(self) -> set[str]:
-        return set(id for id, _ in self.items())
+    @abc.abstractmethod
+    def reset(self) -> None:
+        """
+        Reset the beaker to empty.
+        """
 
 
 class TempBeaker(Beaker):
@@ -83,6 +86,12 @@ class TempBeaker(Beaker):
 
     def __len__(self) -> int:
         return len(self._items)
+
+    def parent_id_set(self) -> set[str]:
+        return set(self._parent_ids.values())
+
+    def id_set(self) -> set[str]:
+        return set(self._items.keys())
 
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
@@ -106,9 +115,6 @@ class TempBeaker(Beaker):
             return self._items[id]
         except KeyError:
             raise ItemNotFound(f"{id} not found in {self.name}")
-
-    def parent_id_set(self) -> set[str]:
-        return set(self._parent_ids.values())
 
     def delete(self, parent: str) -> int:
         deleted = 0
@@ -136,12 +142,18 @@ class SqliteBeaker(Beaker):
         log.info("beaker initialized", count=self._table.count, name=self.name)
         # TODO: allow pydantic-to-model here
 
+    def __len__(self) -> int:
+        return self._table.count
+
+    def parent_id_set(self) -> set[str]:
+        return {row["parent"] for row in self._table.rows}
+
+    def id_set(self) -> set[str]:
+        return {row["uuid"] for row in self._table.rows}
+
     def items(self) -> Iterable[tuple[str, BaseModel]]:
         for item in self._table.rows:
             yield item["uuid"], self.model(**json.loads(item["data"]))
-
-    def __len__(self) -> int:
-        return self._table.count
 
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
@@ -173,9 +185,6 @@ class SqliteBeaker(Beaker):
         except NotFoundError:
             raise ItemNotFound(f"{id} not found in {self.name}")
         return self.model(**json.loads(row["data"]))
-
-    def parent_id_set(self) -> set[str]:
-        return {row["parent"] for row in self._table.rows}
 
     def reset(self) -> None:
         log.info("beaker cleared", beaker=self.name)

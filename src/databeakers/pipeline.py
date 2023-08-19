@@ -365,7 +365,7 @@ class Pipeline:
             from_beaker = self.beakers[node]
             all_upstream = self._all_upstream_ids(edge)
             already_processed = from_beaker.id_set() & all_upstream
-            node_report["_already_processed"] += len(already_processed)
+            node_report["_already_processed"] = len(already_processed)
 
             log.info(
                 "processing edge",
