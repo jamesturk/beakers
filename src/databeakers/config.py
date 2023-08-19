@@ -34,9 +34,9 @@ def load_config(**overrides):
     processors = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
-        structlog.processors.StackInfoRenderer(),
-        structlog.dev.set_exc_info,
-        structlog.processors.TimeStamper(),
+        structlog.processors.format_exc_info,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        # structlog.processors.StackInfoRenderer(),
     ]
 
     # either JSON renderer or console renderer
@@ -57,6 +57,7 @@ def load_config(**overrides):
         factory = structlog.PrintLoggerFactory(file=open(config.log_file, "w"))
 
     structlog.configure(
+        cache_logger_on_first_use=True,
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(
             structlog.processors._NAME_TO_LEVEL[config.log_level]
