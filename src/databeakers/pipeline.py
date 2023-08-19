@@ -575,10 +575,11 @@ class Pipeline:
         reset_list = []
         # transaction around entire reset
         with self._db.conn:
-            self._seeds_t.delete_where("1=1")
+            self._seeds_t.delete_where()
             #    reset_list.append(f"seeds ({seed_count})")
             for beaker in self.beakers.values():
                 if bl := len(beaker):
+                    log.info("resetting", beaker=beaker.name, count=bl)
                     beaker.reset()
                     reset_list.append(f"{beaker.name} ({bl})")
         return reset_list

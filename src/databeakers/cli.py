@@ -346,7 +346,10 @@ def export(
     if format == "json":
         print(json.dumps(output, indent=1))
     elif format == "csv":
-        writer = csv.DictWriter(sys.stdout, fieldnames=output[0].keys())
+        writer = csv.DictWriter(
+            sys.stdout,
+            fieldnames=["id"] + [k for k in output[0].keys() if not k == "id"],
+        )
         writer.writeheader()
         writer.writerows(output)
 

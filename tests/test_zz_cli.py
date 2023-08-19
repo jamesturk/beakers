@@ -3,7 +3,7 @@ import json
 from typer.testing import CliRunner
 from databeakers.cli import app
 from databeakers.pipeline import RunMode
-from examples import fruits
+from examples import fruits, Sentence
 import os
 
 """
@@ -170,9 +170,18 @@ def test_run_simple():
 def test_output_json():
     fruits.reset()
 
-    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
-    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
-    assert result.exit_code == 0
+    # TODO: there is a testing bug with TempBeakers so for now
+    # just inject data into sentences
+    fruits.beakers["sentence"].add_item(
+        Sentence(sentence="apple is a delicious fruit."),
+        parent="p",
+        id_=1,
+    )
+    fruits.beakers["sentence"].add_item(
+        Sentence(sentence="pineapple is a delicious fruit."),
+        parent="p",
+        id_=2,
+    )
 
     result = runner.invoke(
         app,
@@ -188,5 +197,39 @@ def test_output_json():
     assert result.exit_code == 0
     data = json.loads(result.stdout)
     assert len(data) == 2
-    assert data[0]["sentence"] == "banana is a delicious fruit."
-    assert data[1]["sentence"] == "apple is a delicious fruit."
+    assert data[0]["sentence"] == "apple is a delicious fruit."
+    assert data[1]["sentence"] == "pineapple is a delicious fruit."
+
+
+def test_output_csv():
+    fruits.reset()
+
+    # TODO: there is a testing bug with TempBeakers so for now
+    # just inject data into sentences
+    fruits.beakers["sentence"].add_item(
+        Sentence(sentence="apple is a delicious fruit."),
+        parent="p",
+        id_=1,
+    )
+    fruits.beakers["sentence"].add_item(
+        Sentence(sentence="pineapple is a delicious fruit."),
+        parent="p",
+        id_=2,
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "--pipeline",
+            "tests.examples.fruits",
+            "export",
+            "--format",
+            "csv",
+            "sentence",
+        ],
+    )
+    assert result.exit_code == 0
+    assert (
+        result.stdout
+        == "id,sentence\n1,apple is a delicious fruit.\n2,pineapple is a delicious fruit.\n"
+    )
