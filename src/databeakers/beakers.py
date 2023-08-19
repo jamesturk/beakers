@@ -139,7 +139,7 @@ class SqliteBeaker(Beaker):
             pk="uuid",
             if_not_exists=True,
         )
-        log.info("beaker initialized", count=self._table.count, name=self.name)
+        log.debug("beaker initialized", count=self._table.count, name=self.name)
         # TODO: allow pydantic-to-model here
 
     def __len__(self) -> int:

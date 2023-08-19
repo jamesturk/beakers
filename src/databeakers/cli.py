@@ -1,4 +1,5 @@
 import importlib
+import itertools
 import time
 import json
 import csv
@@ -284,6 +285,23 @@ def peek(
     if not thing:
         typer.secho("Must specify a beaker name or UUID", fg=typer.colors.RED)
         raise typer.Exit(1)
+    elif thing in ctx.obj.beakers:
+        beaker = ctx.obj.beakers[thing]
+        t = Table(title=thing, show_header=False, show_lines=False)
+        t.add_column("UUID", style="cyan")
+        for field in beaker.model.model_fields:
+            t.add_column(field)
+        for id_, record in itertools.islice(beaker.items(), 10):
+            fields = [id_]
+            for field in beaker.model.model_fields:
+                value = getattr(record, field)
+                if isinstance(value, str):
+                    value = (
+                        value[:40] + f"... ({len(value)})" if len(value) > 40 else value
+                    )
+                fields.append(str(value))
+            t.add_row(*fields)
+        print(t)
     elif uuid_re.match(thing):
         record = ctx.obj._get_full_record(thing)
         t = Table(title=thing, show_header=False, show_lines=False)
