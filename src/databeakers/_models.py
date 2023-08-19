@@ -5,6 +5,7 @@ import datetime
 from enum import Enum
 from pydantic import BaseModel
 from typing import Callable, Iterable
+from ._utils import required_parameters
 
 
 class RunMode(Enum):
@@ -70,3 +71,11 @@ class Seed(BaseModel):
     name: str
     func: Callable[[], Iterable[BaseModel]]
     beaker_name: str
+
+    @property
+    def display_name(self):
+        parameters = required_parameters(self.func)
+        if parameters:
+            return f"{self.name}({', '.join(parameters)})"
+        else:
+            return self.name

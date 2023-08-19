@@ -57,7 +57,8 @@ def load_config(**overrides):
         factory = structlog.PrintLoggerFactory(file=open(config.log_file, "w"))
 
     structlog.configure(
-        cache_logger_on_first_use=True,
+        # TODO: figure out why this was failing
+        # cache_logger_on_first_use=True,
         processors=processors,
         wrapper_class=structlog.make_filtering_bound_logger(
             structlog.processors._NAME_TO_LEVEL[config.log_level]

@@ -54,12 +54,15 @@ class Pipeline:
         self.seeds[name] = Seed(name=name, func=callable, beaker_name=beaker_name)
 
     def list_seeds(self) -> dict[str, dict[str, list]]:
+        """
+        Create list of seeds and runs, suitable for output.
+        """
         # without defaultdict so return type is clear
         by_beaker: dict[str, dict[str, list]] = {}
         for seed in self.seeds.values():
             if seed.beaker_name not in by_beaker:
                 by_beaker[seed.beaker_name] = {}
-            by_beaker[seed.beaker_name][seed.name] = self.get_seed_runs(
+            by_beaker[seed.beaker_name][seed.display_name] = self.get_seed_runs(
                 seed_name=seed.name
             )
         return by_beaker

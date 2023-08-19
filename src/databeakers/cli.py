@@ -145,6 +145,9 @@ def graph(
     filename: str = typer.Option("graph.svg", "--filename", "-f"),
     excludes: list[str] = typer.Option([], "--exclude", "-e"),
 ) -> None:
+    """
+    Write a graphviz graph of the pipeline to a file.
+    """
     dotg = ctx.obj.to_pydot(excludes)
     if filename.endswith(".svg"):
         dotg.write_svg(filename, prog="dot")
@@ -273,6 +276,9 @@ def peek(
     ctx: typer.Context,
     thing: Optional[str] = typer.Argument(None),
 ):
+    """
+    Peek at a beaker or record.
+    """
     if not thing:
         typer.secho("Must specify a beaker name or UUID", fg=typer.colors.RED)
         raise typer.Exit(1)

@@ -44,9 +44,42 @@ def pipeline():
     return p
 
 
-def test_list_seeds(pipeline):
+def anagrams(word):
+    for anagram in itertools.permutations(word):
+        yield Word(word="".join(anagram))
+
+
+@pytest.fixture
+def anagram_p():
+    p = Pipeline("seeds", ":memory:")
+    p.add_beaker("word", Word)
+    p.register_seed(anagrams, "word")
+    return p
+
+
+def test_list_seeds_empty(pipeline):
     res = pipeline.list_seeds()
     assert res == {"animal": {"farm": [], "zoo": []}, "place": {"places": []}}
+
+
+def test_list_seeds_runs(pipeline):
+    pipeline.run_seed("places")
+    res = pipeline.list_seeds()
+    run = res["place"]["places"][0]
+    assert run.num_items == 5
+    assert run.run_repr == "sr:places"
+
+
+def test_list_seeds_multiple_runs(anagram_p):
+    anagram_p.run_seed("anagrams", parameters={"word": "test"})
+    anagram_p.run_seed("anagrams", parameters={"word": "wow"})
+    res = anagram_p.list_seeds()
+    assert len(res["word"]["anagrams(word)"]) == 2
+    test, wow = res["word"]["anagrams(word)"]
+    assert test.num_items == 24
+    assert test.run_repr == "sr:anagrams[word=test]"
+    assert wow.num_items == 6
+    assert wow.run_repr == "sr:anagrams[word=wow]"
 
 
 def test_run_seed(pipeline):
@@ -146,19 +179,6 @@ def test_get_run(pipeline):
     assert run.num_items == 5
     assert run.start_time is not None
     assert run.end_time is not None
-
-
-def anagrams(word):
-    for anagram in itertools.permutations(word):
-        yield Word(word="".join(anagram))
-
-
-@pytest.fixture
-def anagram_p():
-    p = Pipeline("seeds", ":memory:")
-    p.add_beaker("word", Word)
-    p.register_seed(anagrams, "word")
-    return p
 
 
 def test_run_seed_parameters_basic(anagram_p):
