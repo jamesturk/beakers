@@ -15,7 +15,7 @@ from ._record import Record
 from ._models import RunMode, RunReport, ErrorType, SeedRun, Seed
 from ._utils import callable_name, pydantic_to_schema, pyd_wrap
 from .beakers import Beaker, SqliteBeaker, TempBeaker
-from .edges import Transform, Edge, Destination, Splitter
+from .edges import Transform, Edge, Splitter, DEST_STOP
 from .exceptions import ItemNotFound, SeedError, InvalidGraph
 
 
@@ -499,8 +499,8 @@ class Pipeline:
 
         # run the edge function & push results to dest beakers
         async for e_result in edge._run(id, data):
-            if e_result.dest == Destination.stop:
-                return Destination.stop
+            if e_result.dest == DEST_STOP:
+                return DEST_STOP
             else:
                 beaker = self.beakers[e_result.dest]
                 beaker.add_item(e_result.data, parent=id, id_=e_result.id_)
@@ -655,7 +655,3 @@ class Pipeline:
             except ItemNotFound:
                 pass
         return rec
-
-
-class MaxSeedItems(Exception):
-    pass

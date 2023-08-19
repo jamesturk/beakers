@@ -9,13 +9,11 @@ from ._record import Record
 
 log = get_logger()
 
+DEST_STOP = "__stop"  # sentinel value for stopping the pipeline
+
 
 class Edge(BaseModel):
     whole_record: bool = False
-
-
-class Destination:
-    stop = "_stop"
 
 
 class EdgeResult(BaseModel):
@@ -96,7 +94,7 @@ class Transform(Edge):
             lg.info("edge transform (generator)", num_yielded=num_yielded)
             if not num_yielded:
                 if self.allow_filter:
-                    yield EdgeResult(dest=Destination.stop, data=None, id_=id_)
+                    yield EdgeResult(dest=DEST_STOP, data=None, id_=id_)
                 else:
                     raise NoEdgeResult("edge generator yielded no items")
         elif result is not None:
@@ -106,7 +104,7 @@ class Transform(Edge):
         elif self.allow_filter:
             # if nothing is returned, and filtering is allowed, remove from stream
             lg.info("edge transform (removed)", result=None)
-            yield EdgeResult(dest=Destination.stop, data=None, id_=id_)
+            yield EdgeResult(dest=DEST_STOP, data=None, id_=id_)
         else:
             raise NoEdgeResult("transform returned None")
 
