@@ -5,6 +5,8 @@ from examples import fruits
 import os
 
 """
+This file is named test_zz_cli.py so that it runs last.
+
 These are basically E2E tests & not as isolated as other unit tests.
 If they fail check for failing unit tests first!
 

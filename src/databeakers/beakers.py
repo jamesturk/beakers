@@ -133,6 +133,7 @@ class SqliteBeaker(Beaker):
             pk="uuid",
             if_not_exists=True,
         )
+        log.info("beaker initialized", count=self._table.count, name=self.name)
         # TODO: allow pydantic-to-model here
 
     def items(self) -> Iterable[tuple[str, BaseModel]]:
@@ -154,14 +155,17 @@ class SqliteBeaker(Beaker):
             parent = id_ = str(uuid.uuid1())
         elif id_ is None:
             id_ = str(uuid.uuid1())
-        log.debug("add_item", item=item, parent=parent, id=id_, beaker=self.name)
+        log.debug(
+            "add_item",
+            item=item,
+            parent=parent,
+            id=id_,
+            beaker=self.name,
+        )
         self._table.db.execute(
             f"INSERT INTO {self.name} (uuid, parent, data) VALUES (?, ?, ?)",
             (id_, parent, item.model_dump_json()),
         )
-
-    def reset(self) -> None:
-        self._table.delete_where()
 
     def get_item(self, id: str) -> BaseModel:
         try:
@@ -173,5 +177,18 @@ class SqliteBeaker(Beaker):
     def parent_id_set(self) -> set[str]:
         return {row["parent"] for row in self._table.rows}
 
+    def reset(self) -> None:
+        log.info("beaker cleared", beaker=self.name)
+        self._table.delete_where()
+
     def delete(self, parent: str) -> int:
-        return self._table.delete_where("parent=?", (parent,))
+        before = self._table.count
+        self._table.delete_where("parent=?", (parent,))
+        after = self._table.count
+        log.info(
+            "beaker delete where",
+            beaker=self.name,
+            parent=parent,
+            deleted=before - after,
+        )
+        return before - after
