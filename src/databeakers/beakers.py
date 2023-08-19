@@ -25,15 +25,15 @@ class Beaker(abc.ABC):
         return f"{self.__class__.__name__}({self.name}, {self.model.__name__})"
 
     @abc.abstractmethod
-    def items(self) -> Iterable[tuple[str, BaseModel]]:
-        """
-        Return list of items in the beaker.
-        """
-
-    @abc.abstractmethod
     def __len__(self) -> int:
         """
         Return number of items in the beaker.
+        """
+
+    @abc.abstractmethod
+    def items(self) -> Iterable[tuple[str, BaseModel]]:
+        """
+        Return iterable of items in the beaker.
         """
 
     @abc.abstractmethod
@@ -174,4 +174,4 @@ class SqliteBeaker(Beaker):
         return {row["parent"] for row in self._table.rows}
 
     def delete(self, parent: str) -> int:
-        return self._table.delete_where(parent=parent).rowcount
+        return self._table.delete_where("parent=?", (parent,))

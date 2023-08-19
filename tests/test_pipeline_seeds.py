@@ -68,17 +68,17 @@ def error_pipeline():
     return p
 
 
-def test_run_seed_partial_chunks(error_pipeline):
-    # default is to set a huge checkpoint size, so nothing is saved
-    res = error_pipeline.run_seed("error_seed")
+def test_run_seed_no_save_bad_runs(error_pipeline):
+    # set low chunk size, to ensure deletion is required
+    res = error_pipeline.run_seed("error_seed", save_bad_runs=False, chunk_size=10)
     assert len(error_pipeline.beakers["words"]) == 0
-    assert error_pipeline.get_seed_run("sr:error_seed") == res
+    assert error_pipeline.get_seed_run("sr:error_seed") is None  # not saved to db
     assert res.num_items == 0
     assert res.error == "ZeroDivisionError"
 
 
 def test_run_seed_partial_chunks_saved(error_pipeline):
-    res = error_pipeline.run_seed("error_seed", save_partial_chunks=60)
+    res = error_pipeline.run_seed("error_seed", chunk_size=60)
     assert len(error_pipeline.beakers["words"]) == 60
     assert res.num_items == 60
     assert res.error == "ZeroDivisionError"
@@ -88,7 +88,7 @@ def test_run_seed_partial_chunks_saved(error_pipeline):
 
 def test_run_seed_partial_chunks_nothing_saved(error_pipeline):
     # too big of a chunk size, error is raised before commit
-    res = error_pipeline.run_seed("error_seed", save_partial_chunks=100)
+    res = error_pipeline.run_seed("error_seed", chunk_size=100)
     assert len(error_pipeline.beakers["words"]) == 0
     assert res.num_items == 0
     assert res.error == "ZeroDivisionError"

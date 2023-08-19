@@ -83,9 +83,18 @@ class Pipeline:
         *,
         max_items: int = 0,
         reset=False,
-        save_partial_chunks=10000000000000000,
+        chunk_size=100,
+        save_bad_runs=True,
         **kwargs,
     ):
+        """
+        Args:
+            seed_name: name of seed to run
+            max_items: maximum number of items to process
+            reset: whether to reset the beaker before running
+            chunk_size: number of items to add to beaker per transaction
+            save_bad_runs: whether to save runs that fail
+        """
         try:
             seed = self.seeds[seed_name]
         except KeyError:
@@ -107,7 +116,7 @@ class Pipeline:
         error = ""
 
         try:
-            for chunk in chunks(seed.func(), save_partial_chunks):
+            for chunk in chunks(seed.func(), chunk_size):
                 # transaction per chunk
                 with self._db.conn:
                     self._db.execute("BEGIN TRANSACTION")
@@ -120,8 +129,14 @@ class Pipeline:
                     break
         except Exception as e:
             error = str(e) or repr(e)
-            # tail items won't be saved
-            num_items -= num_items % save_partial_chunks
+
+            if not save_bad_runs:
+                # need to delete the beaker items
+                beaker.delete(run_repr)
+                num_items = 0
+            else:
+                # tail items won't be saved
+                num_items -= num_items % chunk_size
 
         end_time = datetime.datetime.utcnow()
         sr = SeedRun(
@@ -133,7 +148,8 @@ class Pipeline:
             end_time=end_time,
             error=str(error),
         )
-        self._seeds_t.insert(dict(sr))
+        if save_bad_runs or not error:
+            self._seeds_t.insert(dict(sr))
         return sr
 
     # section: graph ##########################################################
