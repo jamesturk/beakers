@@ -153,12 +153,57 @@ def anagrams(word):
         yield Word(word="".join(anagram))
 
 
-def test_run_seed_parameters_basic():
+@pytest.fixture
+def anagram_p():
     p = Pipeline("seeds", ":memory:")
     p.add_beaker("word", Word)
     p.register_seed(anagrams, "word")
-    res = p.run_seed("anagrams", parameters={"word": "test"}, save_bad_runs=False)
+    return p
 
-    assert p.get_seed_run("sr:anagrams") is None
-    assert res == p.get_seed_run("sr:anagrams[word=test]")
-    assert len(p.beakers["word"]) == 24
+
+def test_run_seed_parameters_basic(anagram_p):
+    res = anagram_p.run_seed(
+        "anagrams", parameters={"word": "test"}, save_bad_runs=False
+    )
+
+    assert anagram_p.get_seed_run("sr:anagrams") is None
+    assert res == anagram_p.get_seed_run("sr:anagrams[word=test]")
+    assert len(anagram_p.beakers["word"]) == 24
+
+
+def test_run_seed_parameters_multiple_runs(anagram_p):
+    res = anagram_p.run_seed(
+        "anagrams", parameters={"word": "test"}, save_bad_runs=False
+    )
+    assert res == anagram_p.get_seed_run("sr:anagrams[word=test]")
+    assert len(anagram_p.beakers["word"]) == 24
+
+    # different parameters
+    res = anagram_p.run_seed(
+        "anagrams", parameters={"word": "cat"}, save_bad_runs=False
+    )
+    assert res == anagram_p.get_seed_run("sr:anagrams[word=cat]")
+    assert len(anagram_p.beakers["word"]) == 24 + 6
+
+
+def test_get_runs_multiple_parameters(anagram_p):
+    anagram_p.run_seed("anagrams", parameters={"word": "test"}, save_bad_runs=False)
+    anagram_p.run_seed("anagrams", parameters={"word": "cat"}, save_bad_runs=False)
+
+    runs = anagram_p.get_seed_runs("anagrams")
+    assert len(runs) == 2
+    assert runs[0].run_repr == "sr:anagrams[word=test]"
+    assert runs[1].run_repr == "sr:anagrams[word=cat]"
+
+
+def test_run_seed_parameters_multiple_runs_identical(anagram_p):
+    res1 = anagram_p.run_seed(
+        "anagrams", parameters={"word": "test"}, save_bad_runs=False
+    )
+
+    # can't run same seed with same parameters
+    with pytest.raises(SeedError):
+        anagram_p.run_seed("anagrams", parameters={"word": "test"}, save_bad_runs=False)
+
+    # record not updated
+    assert res1 == anagram_p.get_seed_run("sr:anagrams[word=test]")
