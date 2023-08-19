@@ -278,6 +278,8 @@ uuid_re = re.compile(r"^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$")
 def peek(
     ctx: typer.Context,
     thing: Optional[str] = typer.Argument(None),
+    offset: int = typer.Option(0, "--offset", "-o"),
+    max_items: int = typer.Option(10, "--max-items", "-n"),
 ):
     """
     Peek at a beaker or record.
@@ -287,11 +289,11 @@ def peek(
         raise typer.Exit(1)
     elif thing in ctx.obj.beakers:
         beaker = ctx.obj.beakers[thing]
-        t = Table(title=thing, show_header=False, show_lines=False)
+        t = Table(title=f"{thing} ({len(beaker)})", show_header=True, show_lines=False)
         t.add_column("UUID", style="cyan")
         for field in beaker.model.model_fields:
             t.add_column(field)
-        for id_, record in itertools.islice(beaker.items(), 10):
+        for id_, record in itertools.islice(beaker.items(), offset, offset + max_items):
             fields = [id_]
             for field in beaker.model.model_fields:
                 value = getattr(record, field)
