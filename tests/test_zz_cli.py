@@ -1,6 +1,7 @@
 import pytest
 from typer.testing import CliRunner
 from databeakers.cli import app
+from databeakers.pipeline import RunMode
 from examples import fruits
 import os
 
@@ -74,18 +75,19 @@ def test_clear_nothing():
     assert result.exit_code == 1
 
 
-def test_show():
+def test_show_hidden_empty():
     fruits.reset()
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "show"])
-    assert (
-        result.output
-        == """┏━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Node ┃ Items ┃ Edges                    ┃
-┡━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│      │       │ (6 empty beakers hidden) │
-└──────┴───────┴──────────────────────────┘
-"""
-    )
+    expected = """
+┏━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Node ┃ Items ┃ Processed ┃ Edges                    ┃
+┡━━━━━━╇━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│      │       │           │                          │
+│      │       │           │ (6 empty beakers hidden) │
+└──────┴───────┴───────────┴──────────────────────────┘
+""".strip()
+    print(result.output)
+    assert result.output.strip() == expected
 
 
 def test_show_empty():
@@ -93,22 +95,47 @@ def test_show_empty():
     result = runner.invoke(
         app, ["--pipeline", "tests.examples.fruits", "show", "--empty"]
     )
-    assert (
-        result.output
-        == """┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Node       ┃ Items ┃ Edges                        ┃
-┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ errors     │     0 │                              │
-│ fruit      │     0 │ λ -> sentence                │
-│ nonword    │     0 │                              │
-│ normalized │     - │ is_fruit -> fruit            │
-│            │       │    ValueError -> errors      │
-│ sentence   │     0 │                              │
-│ word       │     0 │ λ -> normalized              │
-│            │       │    AttributeError -> nonword │
-└────────────┴───────┴──────────────────────────────┘
-"""
+    expected = """
+┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Node       ┃ Items ┃  Processed ┃ Edges                        ┃
+┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ errors     │     0 │          - │                              │
+│ fruit      │     0 │ 0   (  0%) │ λ -> sentence                │
+│ nonword    │     0 │          - │                              │
+│ normalized │     0 │          - │ is_fruit -> fruit            │
+│            │       │            │    ValueError -> errors      │
+│ sentence   │     0 │          - │                              │
+│ word       │     0 │ 0   (  0%) │ λ -> normalized              │
+│            │       │            │    AttributeError -> nonword │
+└────────────┴───────┴────────────┴──────────────────────────────┘""".strip()
+    print(result.output)
+    assert result.output.strip() == expected
+
+
+def test_show_some_data():
+    fruits.reset()
+    fruits.run_seed("abc")
+    fruits.run_seed("errors")
+    fruits.run(run_mode=RunMode.river)
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "show", "--empty"]
     )
+    expected = """
+┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Node       ┃ Items ┃ Processed ┃ Edges                        ┃
+┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ errors     │     1 │         - │                              │
+│ fruit      │     3 │ 3  (100%) │ λ -> sentence                │
+│ nonword    │     1 │         - │                              │
+│ normalized │     0 │         - │ is_fruit -> fruit            │
+│            │       │           │    ValueError -> errors      │
+│ sentence   │     3 │         - │                              │
+│ word       │     6 │ 1  ( 17%) │ λ -> normalized              │
+│            │       │           │    AttributeError -> nonword │
+└────────────┴───────┴───────────┴──────────────────────────────┘
+""".strip()
+    print(result.output)
+    assert result.output.strip() == expected
 
 
 def test_run_no_data():
