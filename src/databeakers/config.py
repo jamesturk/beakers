@@ -1,3 +1,4 @@
+import sys
 import structlog
 import pydantic
 import toml  # type: ignore
@@ -13,7 +14,7 @@ class Config(BaseSettings):
         description="Logging level.",
     )
     log_file: str = pydantic.Field(
-        "STDOUT",
+        "STDERR",
         description="Path to the log file.",
     )
     log_format: str = pydantic.Field(
@@ -43,10 +44,10 @@ def load_config(**overrides):
     if config.log_format == "json":
         processors.append(structlog.processors.JSONRenderer())
 
-    if config.log_file == "STDOUT":
+    if config.log_file == "STDERR":
         if config.log_format != "json":
             processors.append(structlog.dev.ConsoleRenderer())
-        factory = structlog.PrintLoggerFactory()
+        factory = structlog.PrintLoggerFactory(sys.stderr)
     else:
         if config.log_format != "json":
             processors.append(
