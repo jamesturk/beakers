@@ -6,7 +6,7 @@ lint:
 	poetry run black --check src/ tests/
 
 release type:  # patch, minor, major
-	#poetry version {{type}}
+	poetry version {{type}}
 	poetry build
 	#poetry run mkdocs gh-deploy
 	poetry publish

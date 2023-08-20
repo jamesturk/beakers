@@ -82,12 +82,12 @@ def test_show_hidden_empty():
     fruits.reset()
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "show"])
     expected = """
-┏━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Node ┃ Items ┃ Processed ┃ Edges                    ┃
-┡━━━━━━╇━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│      │       │           │                          │
-│      │       │           │ (6 empty beakers hidden) │
-└──────┴───────┴───────────┴──────────────────────────┘
+┏━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Node ┃ Items ┃ Edges                    ┃
+┡━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│      │       │                          │
+│      │       │ (6 empty beakers hidden) │
+└──────┴───────┴──────────────────────────┘
 """.strip()
     print(result.output)
     assert result.output.strip() == expected
@@ -99,18 +99,18 @@ def test_show_empty():
         app, ["--pipeline", "tests.examples.fruits", "show", "--empty"]
     )
     expected = """
-┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Node       ┃ Items ┃  Processed ┃ Edges                        ┃
-┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│ errors     │     0 │          - │                              │
-│ fruit      │     0 │ 0   (  0%) │ λ -> sentence                │
-│ nonword    │     0 │          - │                              │
-│ normalized │     0 │          - │ is_fruit -> fruit            │
-│            │       │            │    ValueError -> errors      │
-│ sentence   │     0 │          - │                              │
-│ word       │     0 │ 0   (  0%) │ λ -> normalized              │
-│            │       │            │    AttributeError -> nonword │
-└────────────┴───────┴────────────┴──────────────────────────────┘""".strip()
+┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Node       ┃ Items ┃ Edges                        ┃
+┡━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ errors     │     0 │                              │
+│ fruit      │     0 │ λ -> sentence                │
+│ nonword    │     0 │                              │
+│ normalized │     0 │ is_fruit -> fruit            │
+│            │       │    ValueError -> errors      │
+│ sentence   │     0 │                              │
+│ word       │     0 │ λ -> normalized              │
+│            │       │    AttributeError -> nonword │
+└────────────┴───────┴──────────────────────────────┘""".strip()
     print(result.output)
     assert result.output.strip() == expected
 
@@ -121,7 +121,7 @@ def test_show_some_data():
     fruits.run_seed("errors")
     fruits.run(run_mode=RunMode.river)
     result = runner.invoke(
-        app, ["--pipeline", "tests.examples.fruits", "show", "--empty"]
+        app, ["--pipeline", "tests.examples.fruits", "show", "--empty", "--processed"]
     )
     expected = """
 ┏━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓

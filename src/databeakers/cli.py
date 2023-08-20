@@ -63,6 +63,7 @@ def show(
     ctx: typer.Context,
     watch: bool = typer.Option(False, "--watch", "-w"),
     empty: bool = typer.Option(False, "--empty"),
+    count_processed: bool = typer.Option(False, "--processed"),
 ) -> None:
     """
     Show the current state of the pipeline.
@@ -73,7 +74,8 @@ def show(
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("Node")
         table.add_column("Items", justify="right")
-        table.add_column("Processed", justify="right")
+        if count_processed:
+            table.add_column("Processed", justify="right")
         table.add_column("Edges")
         for node in sorted(ctx.obj._beakers_toposort(None)):
             beaker = ctx.obj.beakers[node]
@@ -95,7 +97,8 @@ def show(
                 first = False
 
                 edge = e["edge"]
-                processed |= ctx.obj._all_upstream_ids(edge)
+                if count_processed:
+                    processed |= ctx.obj._all_upstream_ids(edge)
 
                 if isinstance(edge, Transform):
                     edge_string.append(f"{edge.name} -> {edge.to_beaker}", style="cyan")
@@ -109,26 +112,35 @@ def show(
                     for edge in edge.splitter_map.values():
                         edge_string.append(f"\n   -> {edge.to_beaker}", style="green")
 
-            # calculate display string for processed
-            processed &= set(beaker.all_ids())
-            if temp or first:  # temp beaker or no edges
-                processed_str = Text("-", style="dim")
-            elif len(processed):
-                processed_str = Text(
-                    f"{len(processed)}  ({len(processed) / length:>4.0%})",
-                    style="green" if len(processed) == length else "yellow",
+            if count_processed:
+                # calculate display string for processed
+                processed &= set(beaker.all_ids())
+                if temp or first:  # temp beaker or no edges
+                    processed_str = Text("-", style="dim")
+                elif len(processed):
+                    processed_str = Text(
+                        f"{len(processed)}  ({len(processed) / length:>4.0%})",
+                        style="green" if len(processed) == length else "yellow",
+                    )
+                else:
+                    processed_str = Text("0   (  0%)", style="dim red")
+                table.add_row(
+                    Text(f"{node}", style=node_style),
+                    str(length),
+                    processed_str,
+                    edge_string,
                 )
             else:
-                processed_str = Text("0   (  0%)", style="dim red")
-            table.add_row(
-                Text(f"{node}", style=node_style),
-                str(length),
-                processed_str,
-                edge_string,
-            )
+                table.add_row(
+                    Text(f"{node}", style=node_style),
+                    str(length),
+                    edge_string,
+                )
 
-        if empty_count:
+        if empty_count and count_processed:
             table.add_row("", "", "", f"\n({empty_count} empty beakers hidden)")
+        elif empty_count and not count_processed:
+            table.add_row("", "", f"\n({empty_count} empty beakers hidden)")
 
         return table
 
