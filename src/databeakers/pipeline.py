@@ -688,9 +688,10 @@ class Pipeline:
         for id_ in ids:
             log.info(f"grabbing id {id_}")
             record = self._get_full_record(id_)
-            as_dict = dict(record[main_beaker])  # type: ignore
+            as_dict = dict(id=id_, **dict(record[main_beaker]))  # type: ignore
             for aux_beaker in aux_beakers:
+                if aux_beaker not in record:
+                    continue
                 for k, v in dict(record[aux_beaker]).items():  # type: ignore
                     as_dict[f"{aux_beaker}_{k}"] = v
-            as_dict["id"] = id_
             yield as_dict

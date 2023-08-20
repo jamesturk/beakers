@@ -24,5 +24,8 @@ class Record:
         else:
             raise AttributeError(f"DataObject attribute {name} already exists")
 
+    def __contains__(self, name: str) -> bool:
+        return name in self._data
+
     def __repr__(self):
         return f"{self.__class__.__name__}({self.id})"

@@ -279,6 +279,7 @@ def peek(
     thing: Optional[str] = typer.Argument(None),
     offset: int = typer.Option(0, "--offset", "-o"),
     max_items: int = typer.Option(10, "--max-items", "-n"),
+    extra_beakers: list[str] = typer.Option([], "--beaker", "-b"),
 ):
     """
     Peek at a beaker or record.
@@ -288,14 +289,17 @@ def peek(
         raise typer.Exit(1)
     elif thing in ctx.obj.beakers:
         beaker = ctx.obj.beakers[thing]
+        beakers = [thing] + extra_beakers  # list of all names
         t = Table(title=f"{thing} ({len(beaker)})", show_header=True, show_lines=False)
         t.add_column("UUID", style="cyan")
-        for field in beaker.model.model_fields:
+        rows = list(ctx.obj._grab_rows(beakers, offset=offset, max_items=max_items))
+        for field in rows[0].keys():
             t.add_column(field)
-        beakers = [thing]
-        for rec in ctx.obj._grab_rows(beakers, offset=offset, max_items=max_items):
-            fields = []
+        for rec in rows:
+            fields = [rec["id"]]
             for field, value in rec.items():
+                if field == "id":
+                    continue
                 if isinstance(value, str):
                     value = (
                         value[:40] + f"... ({len(value)})" if len(value) > 40 else value
@@ -348,7 +352,7 @@ def export(
     elif format == "csv":
         writer = csv.DictWriter(
             sys.stdout,
-            fieldnames=["id"] + [k for k in output[0].keys() if not k == "id"],
+            fieldnames=[k for k in output[0].keys()],
         )
         writer.writeheader()
         writer.writerows(output)

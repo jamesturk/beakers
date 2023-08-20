@@ -249,13 +249,32 @@ def test_peek_beaker():
     assert "cat" in result.output
 
 
+def test_peek_beaker_join_beakers():
+    fruits.reset()
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+    assert len(fruits.beakers["word"]) == 3
+
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "peek", "word", "-b", "sentence"]
+    )
+    print(result.output)
+    assert result.exit_code == 0
+    assert "word (3) " in result.output
+    assert "apple" in result.output
+    assert "BANANA" in result.output
+    assert "cat" in result.output
+    assert "sentence_sentence" in result.output
+
+
 def test_peek_item():
     fruits.reset()
     # full run through abc
     runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
     ids = fruits.beakers["word"].all_ids()
     assert len(ids) == 3
-    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+    assert result.exit_code == 0
 
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "peek", ids[0]])
     assert result.exit_code == 0
