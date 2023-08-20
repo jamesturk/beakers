@@ -170,14 +170,16 @@ def seeds(ctx: typer.Context) -> None:
     List the available seeds and their status.
     """
     for beaker, seeds in ctx.obj.list_seeds().items():
-        typer.secho(beaker)
         for seed, runs in seeds.items():
-            typer.secho(
-                f"  {seed}",
-                fg=typer.colors.GREEN if len(runs) else typer.colors.YELLOW,
+            print(
+                Text(f"{seed:<30}", style="bright"),
+                Text(f"(-> {beaker})", style="dim", justify="right"),
             )
             for run in runs:
-                typer.secho(f"    {run}", fg=typer.colors.GREEN)
+                typer.secho(
+                    f"    {run}",
+                    fg=typer.colors.RED if run.error else typer.colors.GREEN,
+                )
 
 
 @app.command()
@@ -186,12 +188,16 @@ def seed(
     name: str,
     num_items: int = typer.Option(0, "--num-items", "-n"),
     reset: bool = typer.Option(False, "--reset", "-r"),
+    parameters: List[str] = typer.Option([], "--param", "-p"),
 ) -> None:
     """
     Run a seed.
     """
+    split = {k: v for k, v in (p.split("=") for p in parameters)}
     try:
-        seed_run = ctx.obj.run_seed(name, max_items=num_items, reset=reset)
+        seed_run = ctx.obj.run_seed(
+            name, max_items=num_items, reset=reset, parameters=split
+        )
         typer.secho(f"Ran seed: {seed_run}", fg=typer.colors.GREEN)
     except SeedError as e:
         typer.secho(f"{e}", fg=typer.colors.RED)

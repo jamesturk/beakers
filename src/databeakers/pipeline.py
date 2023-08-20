@@ -14,7 +14,7 @@ from sqlite_utils.utils import chunks
 
 from ._record import Record
 from ._models import RunMode, RunReport, ErrorType, SeedRun, Seed
-from ._utils import callable_name, pydantic_to_schema, pyd_wrap
+from ._utils import callable_name, pydantic_to_schema, pyd_wrap, required_parameters
 from .beakers import Beaker, SqliteBeaker, TempBeaker
 from .edges import Transform, Edge, Splitter, DEST_STOP
 from .exceptions import ItemNotFound, SeedError, InvalidGraph
@@ -115,6 +115,11 @@ class Pipeline:
             param_order = ",".join(f"{k}={v}" for k, v in sorted(parameters.items()))
             run_repr = f"sr:{seed.name}[{param_order}]"
         num_items = 0
+        required = required_parameters(seed.func)
+        if set(required) != set(parameters.keys()):
+            raise SeedError(
+                f"Seed {seed_name} requires parameters: {required} (got {list(parameters.keys())}))"
+            )
 
         beaker = self.beakers[seed.beaker_name]
         if reset:

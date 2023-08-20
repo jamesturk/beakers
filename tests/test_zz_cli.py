@@ -36,8 +36,10 @@ def test_no_pipeline():
 def test_list_seeds_simple(no_color):
     fruits.reset()
     result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seeds"])
-    assert "word\n  abc\n  errors\n" in result.output
     assert result.exit_code == 0
+    assert "abc" in result.output
+    assert "errors" in result.output
+    assert "(-> word)" in result.output
 
 
 def test_run_seed_simple():
