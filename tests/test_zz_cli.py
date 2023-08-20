@@ -247,3 +247,17 @@ def test_peek_beaker():
     assert "apple" in result.output
     assert "BANANA" in result.output
     assert "cat" in result.output
+
+
+def test_peek_item():
+    fruits.reset()
+    # full run through abc
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    ids = fruits.beakers["word"].all_ids()
+    assert len(ids) == 3
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "peek", ids[0]])
+    assert result.exit_code == 0
+    assert ids[0] in result.output
+    assert "apple is a delicious... (27)"
