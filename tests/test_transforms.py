@@ -1,7 +1,7 @@
 import time
 import pytest
 from databeakers.http import HttpRequest
-from databeakers.transforms import RateLimit, Retry, Conditional, IfFalse
+from databeakers.transforms import RateLimit, Retry
 
 
 async def assert_time_diff_between(func, min_diff, max_diff):
@@ -89,30 +89,3 @@ def test_stacked_repr():
     assert repr(Retry(RateLimit(HttpRequest()), retries=1)) == (
         "Retry(RateLimit(HttpRequest(url), 1), 1)"
     )
-
-
-@pytest.mark.asyncio
-async def test_conditional_true():
-    conditional = Conditional(
-        lambda s: s.upper(), condition=lambda s: s in "abc", if_false=IfFalse.drop
-    )
-    assert await conditional("a") == "A"
-    assert await conditional("b") == "B"
-    assert await conditional("c") == "C"
-    assert await conditional("d") is None
-
-
-@pytest.mark.asyncio
-async def test_conditional_false_drop():
-    conditional = Conditional(
-        lambda s: s.upper(), condition=lambda s: s in "abc", if_false=IfFalse.drop
-    )
-    assert await conditional("d") is None
-
-
-@pytest.mark.asyncio
-async def test_conditional_false_send():
-    conditional = Conditional(
-        lambda s: s.upper(), condition=lambda s: s in "abc", if_false=IfFalse.send
-    )
-    assert await conditional("d") == "d"
