@@ -51,6 +51,14 @@ class Pipeline:
         beaker_name: str,
         seed_name: str = "",
     ):
+        """
+        Register a seed function to be run.
+
+        Args:
+            callable: function that returns an iterable of pydantic models
+            beaker_name: name of beaker to add items to
+            seed_name: name of seed, defaults to callable name but can be overridden
+        """
         name = seed_name or callable_name(callable)
         self.seeds[name] = Seed(name=name, func=callable, beaker_name=beaker_name)
 
@@ -69,11 +77,17 @@ class Pipeline:
         return by_beaker
 
     def get_seed_runs(self, seed_name: str) -> list[SeedRun]:
+        """
+        Get all runs for a seed.
+        """
         return list(
             pyd_wrap(self._seeds_t.rows_where("seed_name = ?", [seed_name]), SeedRun)
         )
 
     def get_seed_run(self, run_repr: str) -> SeedRun | None:
+        """
+        Get a single run by its representation.
+        """
         try:
             return list(
                 pyd_wrap(self._seeds_t.rows_where("run_repr = ?", [run_repr]), SeedRun)
@@ -92,6 +106,8 @@ class Pipeline:
         parameters: dict[str, str] | None = None,
     ):
         """
+        Run a seed function to populate a beaker.
+
         Args:
             seed_name: name of seed to run
             max_items: maximum number of items to process
@@ -177,6 +193,14 @@ class Pipeline:
         datatype: Type[BaseModel],
         beaker_type: Type[Beaker] = SqliteBeaker,
     ) -> Beaker:
+        """
+        Add a beaker to the graph.
+
+        Args:
+            name: name of beaker
+            datatype: type of data stored in beaker
+            beaker_type: type of beaker to use (default: SqliteBeaker)
+        """
         self.graph.add_node(name, datatype=datatype, node_type="beaker")
         self.beakers[name] = beaker_type(name, datatype, self)
         return self.beakers[name]
@@ -192,6 +216,20 @@ class Pipeline:
         whole_record: bool = False,
         allow_filter: bool = True,
     ) -> None:
+        """
+        Add a transform to the graph.
+
+        Args:
+            from_beaker: name of beaker to transform from
+            to_beaker: name of beaker to transform to
+            func: function to transform data
+
+        Keyword Args:
+            name: name of transform (default: callable name)
+            error_map: map of exceptions to beaker names (default: {})
+            whole_record: whether to pass the whole record to the transform (default: False)
+            allow_filter: whether to allow filtering of items (default: True)
+        """
         edge = Transform(
             name=name,
             func=func,

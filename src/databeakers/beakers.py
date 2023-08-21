@@ -71,7 +71,6 @@ class Beaker(abc.ABC):
 
         Return number of items deleted.
         """
-        return 0
 
     @abc.abstractmethod
     def reset(self) -> None:

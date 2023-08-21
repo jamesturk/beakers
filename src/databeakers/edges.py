@@ -1,5 +1,6 @@
 import abc
 import inspect
+from operator import itemgetter
 from typing import AsyncGenerator, Callable, Generator
 from pydantic import BaseModel
 from structlog import get_logger
@@ -136,9 +137,9 @@ class Splitter(Edge):
 
     def __init__(
         self,
-        *,
         func: Callable,
         splitter_map: dict[str, Transform],
+        *,
         name: str | None = None,
         whole_record: bool = False,
     ):
@@ -177,3 +178,39 @@ class Splitter(Edge):
         for transform in self.splitter_map.values():
             out.update(transform.out_beakers())
         return out
+
+
+def _record_itemgetter(beaker: str, field: str) -> Callable[[Record], BaseModel]:
+    return lambda record: getattr(record[beaker], field)
+
+
+class FieldSplitter(Splitter):
+    """
+    Specialized splitter that splits on a field of the input record.
+    """
+
+    def __init__(
+        self,
+        field: str,
+        splitter_map: dict[str, Transform],
+        *,
+        beaker_name: str | None = None,
+        whole_record: bool = False,
+        name: str | None = None,
+    ):
+        if whole_record:
+            if not beaker_name:
+                raise ValueError("beaker_name must be specified if whole_record=True")
+            func = _record_itemgetter(beaker_name, field)
+            if name is None:
+                name = f"FieldSplitter({field}, beaker={beaker_name})"
+        else:
+            func = itemgetter(field)
+            if name is None:
+                name = f"FieldSplitter({field})"
+        super().__init__(
+            func=func,
+            splitter_map=splitter_map,
+            name=name,
+            whole_record=whole_record,
+        )
