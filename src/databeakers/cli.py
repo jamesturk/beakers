@@ -314,6 +314,7 @@ def peek(
                 beakers, offset=offset, max_items=max_items, parameters=split
             )
         )
+        # TODO: len(rows) is wrong for these
         if split:
             arg_str = ", ".join(f"{k}={v}" for k, v in split.items())
             t = Table(
