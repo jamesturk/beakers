@@ -31,7 +31,9 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
-    def all_ids(self, ordered: bool = False) -> Iterable[str]:
+    def all_ids(
+        self, ordered: bool = False, where: dict[str, str] | None = None
+    ) -> Iterable[str]:
         """
         Return set of ids.
         """
@@ -90,8 +92,12 @@ class TempBeaker(Beaker):
     def parent_id_set(self) -> set[str]:
         return set(self._parent_ids.values())
 
-    def all_ids(self, ordered: bool = False) -> Iterable[str]:
+    def all_ids(
+        self, ordered: bool = False, parameters: dict[str, str] | None = None
+    ) -> Iterable[str]:
         ids: Iterable[str] = self._items.keys()
+        if parameters:
+            raise ValueError("parameters not supported for TempBeaker")
         if ordered:
             ids = sorted(ids)
         return ids
@@ -152,8 +158,18 @@ class SqliteBeaker(Beaker):
     def parent_id_set(self) -> set[str]:
         return {row["parent"] for row in self._table.rows}
 
-    def all_ids(self, ordered: bool = False) -> Iterable[str]:
-        ids = [row["uuid"] for row in self._table.rows]
+    def all_ids(
+        self, ordered: bool = False, where: dict[str, str] | None = None
+    ) -> Iterable[str]:
+        if where:
+            where_str = " and ".join(
+                [f"json_extract(data, '$.{k}') = ?" for k in where.keys()]
+            )
+            where_vals = list(where.values())
+            rows = self._table.rows_where(where_str, where_vals)
+        else:
+            rows = self._table.rows
+        ids = [row["uuid"] for row in rows]
         if ordered:
             ids = sorted(ids)
         return ids

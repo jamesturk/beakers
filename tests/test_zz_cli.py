@@ -282,3 +282,19 @@ def test_peek_item():
     assert result.exit_code == 0
     assert ids[0] in result.output
     assert "apple is a delicious... (27)"
+
+
+def test_peek_beaker_params():
+    fruits.reset()
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    assert len(fruits.beakers["word"]) == 3
+
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "peek", "word", "-p", "word=apple"]
+    )
+    assert result.exit_code == 0
+    print(result.output)
+    # assert "word [word=apple] (1) " in result.output
+    assert "word [word=apple] (1)" in result.output
+    assert "apple" in result.output
+    assert "BANANA" not in result.output

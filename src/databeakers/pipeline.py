@@ -673,6 +673,7 @@ class Pipeline:
         *,
         offset: int,
         max_items: int,
+        parameters: dict[str, Any] | None = None,
     ) -> Iterable[dict[str, Any]]:
         """
         Grab rows from a list of beakers, joined together.
@@ -684,9 +685,9 @@ class Pipeline:
         ids: Iterable[str]
         if offset:
             # ensure order is consistent if paginating
-            ids = beaker.all_ids(ordered=True)
+            ids = beaker.all_ids(ordered=True, where=parameters)
         else:
-            ids = beaker.all_ids()
+            ids = beaker.all_ids(where=parameters)
         if max_items:
             ids = itertools.islice(ids, offset, offset + max_items)
 

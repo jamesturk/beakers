@@ -298,6 +298,7 @@ def peek(
     offset: int = typer.Option(0, "--offset", "-o"),
     max_items: int = typer.Option(10, "--max-items", "-n"),
     extra_beakers: list[str] = typer.Option([], "--beaker", "-b"),
+    parameters: List[str] = typer.Option([], "--param", "-p"),
 ):
     """
     Peek at a beaker or record.
@@ -306,11 +307,24 @@ def peek(
         typer.secho("Must specify a beaker name or UUID", fg=typer.colors.RED)
         raise typer.Exit(1)
     elif thing in ctx.obj.beakers:
-        beaker = ctx.obj.beakers[thing]
         beakers = [thing] + extra_beakers  # list of all names
-        t = Table(title=f"{thing} ({len(beaker)})", show_header=True, show_lines=False)
-        t.add_column("UUID", style="cyan")
-        rows = list(ctx.obj._grab_rows(beakers, offset=offset, max_items=max_items))
+        split = {k: v for k, v in (p.split("=") for p in parameters)}
+        rows = list(
+            ctx.obj._grab_rows(
+                beakers, offset=offset, max_items=max_items, parameters=split
+            )
+        )
+        if split:
+            arg_str = ", ".join(f"{k}={v}" for k, v in split.items())
+            t = Table(
+                title=f"{thing} \[{arg_str}] ({len(rows)})",
+                show_header=True,
+                show_lines=False,
+            )
+        else:
+            t = Table(
+                title=f"{thing} ({len(rows)})", show_header=True, show_lines=False
+            )
         for field in rows[0].keys():
             t.add_column(field)
         for rec in rows:
