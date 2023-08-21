@@ -1,3 +1,4 @@
+import abc
 import inspect
 from typing import AsyncGenerator, Callable, Generator
 from pydantic import BaseModel
@@ -12,14 +13,28 @@ log = get_logger()
 DEST_STOP = "__stop"  # sentinel value for stopping the pipeline
 
 
-class Edge(BaseModel):
-    whole_record: bool = False
-
-
 class EdgeResult(BaseModel):
     dest: str
     data: BaseModel | None
     id_: str | None
+
+
+class Edge(BaseModel):
+    whole_record: bool = False
+
+    # @abc.abstractmethod
+    # async def _run(
+    #     self, id_: str, data: BaseModel | Record
+    # ) -> AsyncGenerator[EdgeResult, None]:
+    #     """
+    #     Overridden to implement the edge logic.
+    #     """
+
+    @abc.abstractmethod
+    def out_beakers(self) -> set[str]:
+        """
+        Return set of beakers that this edge will output to.
+        """
 
 
 class Transform(Edge):
