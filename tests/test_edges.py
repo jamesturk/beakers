@@ -164,6 +164,37 @@ async def test_field_splitter_whole_record():
 
 
 @pytest.mark.asyncio
+async def test_field_splitter_beaker_name_no_whole_record():
+    # invalid state - whole_record and beaker_name must be specified together
+    with pytest.raises(ValueError):
+        FieldSplitter(
+            "tag",
+            whole_record=True,
+            splitter_map={
+                "a": Transform(
+                    lambda x: Word(word=x["tb"].word.upper()), to_beaker="upper"
+                ),
+                "b": Transform(
+                    lambda x: Word(word=x["tb"].word.lower()), to_beaker="lower"
+                ),
+            },
+        )
+    with pytest.raises(ValueError):
+        FieldSplitter(
+            "tag",
+            beaker_name="tb",
+            splitter_map={
+                "a": Transform(
+                    lambda x: Word(word=x["tb"].word.upper()), to_beaker="upper"
+                ),
+                "b": Transform(
+                    lambda x: Word(word=x["tb"].word.lower()), to_beaker="lower"
+                ),
+            },
+        )
+
+
+@pytest.mark.asyncio
 async def test_conditional_splitter():
     splitter = Conditional(
         condition=lambda x: bool(x.tag),

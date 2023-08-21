@@ -1,7 +1,7 @@
 from databeakers.pipeline import Pipeline
 from databeakers.beakers import TempBeaker
 from examples import Word
-from test_splitter import pipeline as splitter_pipeline  # noqa
+from test_edges import pipeline as splitter_pipeline  # noqa
 
 
 def test_basic_graph():

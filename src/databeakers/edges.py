@@ -198,9 +198,11 @@ class FieldSplitter(Splitter):
         whole_record: bool = False,
         name: str | None = None,
     ):
-        if whole_record:
-            if not beaker_name:
-                raise ValueError("beaker_name must be specified if whole_record=True")
+        if whole_record and not beaker_name:
+            raise ValueError("beaker_name must be specified if whole_record=True")
+        elif not whole_record and beaker_name:
+            raise ValueError("beaker_name must not be specified if whole_record=False")
+        elif whole_record and beaker_name:
             func = _record_itemgetter(beaker_name, field)
             if name is None:
                 name = f"FieldSplitter({field}, beaker={beaker_name})"
