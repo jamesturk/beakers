@@ -1,6 +1,6 @@
 import abc
 import inspect
-from operator import itemgetter
+from operator import attrgetter
 from typing import AsyncGenerator, Callable, Generator
 from pydantic import BaseModel
 from structlog import get_logger
@@ -132,13 +132,13 @@ class Transform(Edge):
 
 class Splitter(Edge):
     func: Callable
-    splitter_map: dict[str, Transform]
+    splitter_map: dict[str | int | bool, Transform]
     name: str | None = None
 
     def __init__(
         self,
         func: Callable,
-        splitter_map: dict[str, Transform],
+        splitter_map: dict[str | int | bool, Transform],
         *,
         name: str | None = None,
         whole_record: bool = False,
@@ -192,7 +192,7 @@ class FieldSplitter(Splitter):
     def __init__(
         self,
         field: str,
-        splitter_map: dict[str, Transform],
+        splitter_map: dict[str | int | bool, Transform],
         *,
         beaker_name: str | None = None,
         whole_record: bool = False,
@@ -205,12 +205,37 @@ class FieldSplitter(Splitter):
             if name is None:
                 name = f"FieldSplitter({field}, beaker={beaker_name})"
         else:
-            func = itemgetter(field)
+            func = attrgetter(field)
             if name is None:
                 name = f"FieldSplitter({field})"
         super().__init__(
             func=func,
             splitter_map=splitter_map,
+            name=name,
+            whole_record=whole_record,
+        )
+
+
+class Conditional(Splitter):
+    """
+    Specialized splitter that splits on a boolean condition.
+    """
+
+    def __init__(
+        self,
+        condition: Callable[[BaseModel | Record], bool],
+        if_true: Transform,
+        if_false: Transform,
+        *,
+        name: str | None = None,
+        whole_record: bool = False,
+    ):
+        super().__init__(
+            func=condition,
+            splitter_map={
+                True: if_true,
+                False: if_false,
+            },
             name=name,
             whole_record=whole_record,
         )

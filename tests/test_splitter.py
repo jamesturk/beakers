@@ -2,7 +2,7 @@ import pytest
 from examples import Word
 from pydantic import BaseModel
 from databeakers.pipeline import Pipeline, RunMode
-from databeakers.edges import Splitter, Transform, FieldSplitter
+from databeakers.edges import Splitter, Transform, FieldSplitter, Conditional
 
 animals = ["dog", "cat", "bird", "fish"]
 minerals = ["gold", "silver", "copper", "iron", "lead", "tin", "zinc"]
@@ -121,27 +121,6 @@ async def test_field_splitter():
 
 @pytest.mark.asyncio
 async def test_field_splitter_whole_record():
-    splitter = FieldSplitter(
-        "tag",
-        splitter_map={
-            "a": Transform(lambda x: Word(word=x.word.upper()), to_beaker="upper"),
-            "b": Transform(lambda x: Word(word=x.word.lower()), to_beaker="lower"),
-        },
-    )
-
-    # probably a better way to do this?
-    async for res in splitter._run("1", Tagged(tag="a", word="Apple")):
-        pass
-    assert res.dest == "upper"
-    assert res.data.word == "APPLE"
-    async for res in splitter._run("1", Tagged(tag="b", word="bAnAnA")):
-        pass
-    assert res.dest == "lower"
-    assert res.data.word == "banana"
-
-
-@pytest.mark.asyncio
-async def test_field_splitter_whole_map():
     # mock a Record as a dict w/ tb beaker as only  key
     splitter = FieldSplitter(
         "tag",
@@ -163,6 +142,25 @@ async def test_field_splitter_whole_map():
     assert res.dest == "upper"
     assert res.data.word == "APPLE"
     async for res in splitter._run("1", {"tb": Tagged(tag="b", word="bAnAnA")}):
+        pass
+    assert res.dest == "lower"
+    assert res.data.word == "banana"
+
+
+@pytest.mark.asyncio
+async def test_conditional_splitter():
+    splitter = Conditional(
+        condition=lambda x: bool(x.tag),
+        if_true=Transform(lambda x: Word(word=x.word.upper()), to_beaker="upper"),
+        if_false=Transform(lambda x: Word(word=x.word.lower()), to_beaker="lower"),
+    )
+
+    # probably a better way to do this?
+    async for res in splitter._run("1", Tagged(tag="exists", word="Apple")):
+        pass
+    assert res.dest == "upper"
+    assert res.data.word == "APPLE"
+    async for res in splitter._run("1", Tagged(tag="", word="bAnAnA")):
         pass
     assert res.dest == "lower"
     assert res.data.word == "banana"
