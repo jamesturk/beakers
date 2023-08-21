@@ -27,7 +27,7 @@ class Config(BaseSettings):
 def load_config(**overrides):
     try:
         tomldata = toml.load("databeakers.toml")
-        overrides.update(tomldata["databeakers"])
+        overrides.update(tomldata["databeakers"])  # pragma: no cover
     except FileNotFoundError:
         pass
     config = Config(**overrides)

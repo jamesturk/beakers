@@ -3,6 +3,7 @@ from examples import Word
 from pydantic import BaseModel
 from databeakers.pipeline import Pipeline, RunMode
 from databeakers.edges import Splitter, Transform, FieldSplitter, Conditional
+from databeakers.exceptions import BadSplitResult
 
 animals = ["dog", "cat", "bird", "fish"]
 minerals = ["gold", "silver", "copper", "iron", "lead", "tin", "zinc"]
@@ -96,6 +97,21 @@ async def test_splitter():
 class Tagged(BaseModel):
     tag: str
     word: str
+
+
+@pytest.mark.asyncio
+async def test_splitter_bad_result():
+    splitter = Splitter(
+        lambda x: x.word[0].lower(),
+        splitter_map={
+            "a": Transform(lambda x: Word(word=x.word.upper()), to_beaker="upper"),
+            "b": Transform(lambda x: Word(word=x.word.lower()), to_beaker="lower"),
+        },
+    )
+
+    with pytest.raises(BadSplitResult):
+        async for _ in splitter._run("1", Word(word="Chip")):
+            pass
 
 
 @pytest.mark.asyncio

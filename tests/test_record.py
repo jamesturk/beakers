@@ -25,3 +25,8 @@ def test_record_setattr_id():
 def test_record_getattr_id():
     r = Record(id="123")
     assert r["id"] == "123"
+
+
+def test_record_repr():
+    r = Record(id="123")
+    assert repr(r) == "Record(123)"
