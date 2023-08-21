@@ -22,6 +22,8 @@ class EdgeResult(BaseModel):
 class Edge(BaseModel):
     whole_record: bool = False
 
+    # TODO: this isn't working, which feels like a bug in abc but
+    # needs more investigation as to how this should work.
     # @abc.abstractmethod
     # async def _run(
     #     self, id_: str, data: BaseModel | Record
