@@ -39,6 +39,7 @@ class Pipeline:
             pk="run_repr",
             if_not_exists=True,
         )
+        self._cached_upstream_ids: dict[int, set[str]] = defaultdict(set)
 
     def __repr__(self) -> str:
         return f"Pipeline({self.name})"
@@ -278,8 +279,7 @@ class Pipeline:
                     f"{edge.name} expects databeakers.record.Record, "
                     f"but edge.whole_record is False"
                 )
-            # TODO: re-evaluate? BaseModel added because of the way the conditional decorator works
-            elif item_annotation not in (Record, BaseModel):
+            elif item_annotation != Record:
                 raise InvalidGraph(
                     f"{edge.name} expects {item_annotation.__name__}, "
                     f"but edge.whole_record is True"
@@ -382,6 +382,9 @@ class Pipeline:
             run_mode=run_mode,
             nodes={},
         )
+
+        # hack: clear graph's cache so run can be used multiple times
+        self._cached_upstream_ids = {}
 
         # go through each node in forward order
         if run_mode == RunMode.waterfall:
@@ -685,10 +688,12 @@ class Pipeline:
             yield e["edge"]
 
     def _all_upstream_ids(self, edge: Edge):
-        all_upstream = set()
-        for error_b in edge.out_beakers():
-            all_upstream |= self.beakers[error_b].parent_id_set()
-        return all_upstream
+        if id(edge) not in self._cached_upstream_ids:
+            all_upstream = set()
+            for error_b in edge.out_beakers():
+                all_upstream |= self.beakers[error_b].parent_id_set()
+            self._cached_upstream_ids[id(edge)] = all_upstream
+        return self._cached_upstream_ids[id(edge)]
 
     def _get_full_record(self, id: str) -> Record:
         """
