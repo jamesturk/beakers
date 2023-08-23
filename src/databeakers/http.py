@@ -21,7 +21,12 @@ class HttpRequest:
     """
 
     def __init__(
-        self, field: str = "url", *, follow_redirects: bool = True, retries: int = 0
+        self,
+        field: str = "url",
+        *,
+        follow_redirects: bool = True,
+        retries: int = 0,
+        headers: dict[str, str] | None = None,
     ) -> None:
         """
         Args:
@@ -31,7 +36,7 @@ class HttpRequest:
         self.field = field
         self.follow_redirects = follow_redirects
         transport = httpx.AsyncHTTPTransport(retries=retries)
-        self.client = httpx.AsyncClient(transport=transport)
+        self.client = httpx.AsyncClient(transport=transport, headers=headers)
 
     def __repr__(self):
         return f"HttpRequest({self.field})"
@@ -39,6 +44,10 @@ class HttpRequest:
     async def __call__(self, item: BaseModel) -> HttpResponse:
         url = getattr(item, self.field)
         response = await self.client.get(url, follow_redirects=self.follow_redirects)
+        # a more complicated edge could save the response, this one just raises
+        # if there's an error which is fine because most of the time we don't
+        # care about the response body (TODO: revisit this)
+        response.raise_for_status()
 
         return HttpResponse(
             url=url,
