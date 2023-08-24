@@ -1,6 +1,7 @@
 import abc
 import json
 import uuid
+import pathlib
 from pydantic import BaseModel
 from typing import Iterable, Type, TYPE_CHECKING
 from structlog import get_logger
@@ -223,3 +224,68 @@ class SqliteBeaker(Beaker):
             deleted=before - after,
         )
         return before - after
+
+
+class DirectoryBeaker(Beaker):
+    def __init__(self, name: str, model: PydanticModel, pipeline: "Pipeline"):
+        super().__init__(name, model, pipeline)
+        # create table if it doesn't exist
+        self._dir = pathlib.Path("_files") / self.name
+        self._dir.mkdir(parents=True, exist_ok=True)
+        """
+        This creates a directory structure like this:
+
+        _files/
+            beaker_name/
+                parent_id/
+                    item_id.ext
+        """
+        self._count = 0
+
+    def __len__(self) -> int:
+        return self._count
+
+    def parent_id_set(self) -> set[str]:
+        return set([d.name for d in self._dir.iterdir()])
+
+    def all_ids(
+        self, ordered: bool = False, where: dict[str, str] | None = None
+    ) -> Iterable[str]:
+        if ordered or where:
+            raise ValueError("ordered and where not supported for DirectoryBeaker")
+        return (item.name for item in self._dir.glob("*/*"))
+
+    def add_item(
+        self, item: BaseModel, *, parent: str | None, id_: str | None = None
+    ) -> None:
+        if not hasattr(item, "write_to_path"):
+            raise TypeError(
+                f"beaker {self.name} received {item!r} ({type(item)}), "
+                f"expecting an instance of {self.model} (which must have a write_to_path method)"
+            )
+        if parent is None:
+            parent = id_ = str(uuid.uuid1())
+        elif id_ is None:
+            id_ = str(uuid.uuid1())
+        log.debug(
+            "add_item",
+            item=item,
+            parent=parent,
+            id=id_,
+            beaker=self.name,
+        )
+        path = self._dir / parent / id_
+        item.write_to_path(path)
+        self._count += 1
+
+    def get_item(self, id: str) -> BaseModel:
+        raise NotImplementedError("DirectoryBeaker.get_item() not implemented")
+
+    def items(self) -> Iterable[tuple[str, BaseModel]]:
+        raise NotImplementedError("DirectoryBeaker.items() not implemented")
+
+    def reset(self) -> None:
+        raise NotImplementedError("DirectoryBeaker.reset() not implemented")
+
+    def delete(self, parent: str) -> int:
+        raise NotImplementedError("DirectoryBeaker.delete() not implemented")
