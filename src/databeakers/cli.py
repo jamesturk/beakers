@@ -100,17 +100,14 @@ def show(
                 if count_processed:
                     processed |= ctx.obj._all_upstream_ids(edge)
 
+                edge_string.append(f"{edge.name} -> ", style="cyan")
                 if isinstance(edge, Transform):
-                    edge_string.append(f"{edge.name} -> {edge.to_beaker}", style="cyan")
-                    for exceptions, to_beaker in edge.error_map.items():
-                        edge_string.append(
-                            f"\n   {' '.join(e.__name__ for e in exceptions)} -> {to_beaker}",
-                            style="yellow",
-                        )
+                    edge_string.append(f"{edge.to_beaker}", style="green")
+                    for _, to_beaker in edge.error_map.items():
+                        edge_string.append(f" / {to_beaker}", style="yellow")
                 else:
-                    edge_string.append(f"{edge.name}", style="cyan")
                     for edge in edge.splitter_map.values():
-                        edge_string.append(f"\n   -> {edge.to_beaker}", style="green")
+                        edge_string.append(f" {edge.to_beaker} / ", style="green")
 
             if count_processed:
                 # calculate display string for processed
