@@ -507,7 +507,19 @@ class Pipeline:
         start_beaker = self.beakers[start_b]
         report.nodes = defaultdict(lambda: defaultdict(int))
 
-        for id in start_beaker.all_ids():
+        all_ids = set(start_beaker.all_ids())
+        already_processed = set()
+        for edge in self._out_edges(start_b):
+            already_processed |= self._all_upstream_ids(edge)
+        unprocessed = all_ids - already_processed
+        log.info(
+            "starting river run",
+            start_beaker=start_b,
+            only_beakers=only_beakers,
+            all_ids=len(all_ids),
+            unprocessed=len(unprocessed),
+        )
+        for id in unprocessed:
             # transaction around river runs
             with self._db.conn:
                 record = self._get_full_record(id)
@@ -516,6 +528,8 @@ class Pipeline:
                     self._run_one_item_river(record, start_b, only_beakers)
                 ):
                     report.nodes[from_b][to_b] += 1
+
+        report.nodes[start_b]["_already_processed"] = len(already_processed)
 
         return report
 
