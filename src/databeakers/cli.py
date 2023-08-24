@@ -107,7 +107,7 @@ def show(
                         edge_string.append(f" / {to_beaker}", style="yellow")
                 else:
                     for edge in edge.splitter_map.values():
-                        edge_string.append(f" {edge.to_beaker} / ", style="green")
+                        edge_string.append(f" {edge.to_beaker} /", style="green")
 
             if count_processed:
                 # calculate display string for processed

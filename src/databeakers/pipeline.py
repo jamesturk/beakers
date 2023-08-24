@@ -140,8 +140,8 @@ class Pipeline:
 
         beaker = self.beakers[seed.beaker_name]
         if reset:
-            beaker.reset()
             self._seeds_t.delete_where("run_repr = ?", [run_repr])
+            beaker.delete(parent=run_repr)
 
         if already_run := self.get_seed_run(run_repr):
             raise SeedError(f"Seed {seed_name} already run: {already_run}")
