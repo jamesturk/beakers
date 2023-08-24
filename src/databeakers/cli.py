@@ -296,6 +296,7 @@ def peek(
     max_items: int = typer.Option(10, "--max-items", "-n"),
     extra_beakers: list[str] = typer.Option([], "--beaker", "-b"),
     parameters: List[str] = typer.Option([], "--param", "-p"),
+    max_length: int = typer.Option(40, "--max-length", "-l"),
 ):
     """
     Peek at a beaker or record.
@@ -332,7 +333,9 @@ def peek(
                     continue
                 if isinstance(value, str):
                     value = (
-                        value[:40] + f"... ({len(value)})" if len(value) > 40 else value
+                        value[:max_length] + f"... ({len(value)})"
+                        if len(value) > max_length
+                        else value
                     )
                 fields.append(str(value))
             t.add_row(*fields)
@@ -351,8 +354,8 @@ def peek(
                     value = getattr(record[beaker_name], field)
                     if isinstance(value, str):
                         value = (
-                            value[:20] + f"... ({len(value)})"
-                            if len(value) > 20
+                            value[:max_length] + f"... ({len(value)})"
+                            if len(value) > max_length
                             else value
                         )
                     t.add_row("", field, str(value))
