@@ -693,6 +693,7 @@ class Pipeline:
         seen_ids = set()
         orphaned = defaultdict(list)
         for beaker in self._beakers_toposort(None):
+            log.info("scanning beaker", beaker=beaker, items=len(self.beakers[beaker]))
             for id_, parent in self.beakers[beaker].all_ids_and_parents():
                 # every item must either have come from a seed run
                 # or from another beaker that has already been processed
