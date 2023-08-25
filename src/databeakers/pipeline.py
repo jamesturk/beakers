@@ -166,7 +166,7 @@ class Pipeline:
 
             if not save_bad_runs:
                 # need to delete the beaker items
-                beaker.delete(run_repr)
+                beaker.delete(parent=run_repr)
                 num_items = 0
             else:
                 # tail items won't be saved

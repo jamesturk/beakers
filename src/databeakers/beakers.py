@@ -66,7 +66,7 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
-    def delete(self, parent: str) -> int:
+    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
         """
         Delete all items with the given parent id.
 
@@ -126,10 +126,14 @@ class TempBeaker(Beaker):
         except KeyError:
             raise ItemNotFound(f"{id} not found in {self.name}")
 
-    def delete(self, parent: str) -> int:
+    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
         deleted = 0
         for id, parent_id in self._parent_ids.items():
-            if parent_id == parent:
+            if parent and parent_id == parent:
+                del self._items[id]
+                del self._parent_ids[id]
+                deleted += 1
+            elif ids and id in ids:
                 del self._items[id]
                 del self._parent_ids[id]
                 deleted += 1
@@ -213,9 +217,14 @@ class SqliteBeaker(Beaker):
         log.info("beaker cleared", beaker=self.name)
         self._table.delete_where()
 
-    def delete(self, parent: str) -> int:
+    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
         before = self._table.count
-        self._table.delete_where("parent=?", (parent,))
+        if parent:
+            self._table.delete_where("parent=?", (parent,))
+        elif ids:
+            self._table.delete_where(
+                "uuid in ({})".format(",".join("?" * len(ids))), ids
+            )
         after = self._table.count
         log.info(
             "beaker delete where",
@@ -287,5 +296,5 @@ class DirectoryBeaker(Beaker):
     def reset(self) -> None:
         raise NotImplementedError("DirectoryBeaker.reset() not implemented")
 
-    def delete(self, parent: str) -> int:
+    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
         raise NotImplementedError("DirectoryBeaker.delete() not implemented")
