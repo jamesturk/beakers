@@ -400,10 +400,12 @@ def repair(
     Repair the database.
     """
     repaired = ctx.obj.repair(dry_run)
+    if dry_run:
+        typer.secho("Dry run; no changes will be made!", fg=typer.colors.YELLOW)
     if not repaired:
         typer.secho("Nothing to repair!", fg=typer.colors.GREEN)
-    for beaker, changes in repaired:
-        typer.secho(f"removed {len(changes)} from {beaker}", fg=typer.colors.YELLOW)
+    for beaker, changes in repaired.items():
+        typer.secho(f"removed {len(changes)} from {beaker}", fg=typer.colors.RED)
     if dry_run:
         typer.secho("Dry run; no changes made!", fg=typer.colors.YELLOW)
 
