@@ -162,6 +162,7 @@ class SqliteBeaker(Beaker):
             pk="uuid",
             if_not_exists=True,
         )
+        self._table.create_index(["parent"], if_not_exists=True)
         log.debug("beaker initialized", count=self._table.count, name=self.name)
         # TODO: allow pydantic-to-model here
 

@@ -692,6 +692,8 @@ class Pipeline:
         """
         seen_ids = set()
         orphaned = defaultdict(list)
+        log.info("vacuuming db")
+        self._db.vacuum()
         for beaker in self._beakers_toposort(None):
             log.info("scanning beaker", beaker=beaker, items=len(self.beakers[beaker]))
             for id_, parent in self.beakers[beaker].all_ids_and_parents():
