@@ -40,6 +40,12 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
+    def all_ids_and_parents(self) -> Iterable[tuple[str, str]]:
+        """
+        Return iterable of (id, parent_id) tuples.
+        """
+
+    @abc.abstractmethod
     def parent_id_set(self) -> set[str]:
         """
         Return set of parent ids.
@@ -101,6 +107,9 @@ class TempBeaker(Beaker):
         if ordered:
             ids = sorted(ids)
         return ids
+
+    def all_ids_and_parents(self) -> Iterable[tuple[str, str]]:
+        return self._parent_ids.items()
 
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
@@ -177,6 +186,9 @@ class SqliteBeaker(Beaker):
         if ordered:
             ids = sorted(ids)
         return ids
+
+    def all_ids_and_parents(self) -> Iterable[tuple[str, str]]:
+        return ((row["uuid"], row["parent"]) for row in self._table.rows)
 
     def items(self) -> Iterable[tuple[str, BaseModel]]:
         for item in self._table.rows:
@@ -263,6 +275,9 @@ class DirectoryBeaker(Beaker):
         if ordered or where:
             raise ValueError("ordered and where not supported for DirectoryBeaker")
         return (item.name for item in self._dir.glob("*/*"))
+
+    def all_ids_and_parents(self) -> Iterable[tuple[str, str]]:
+        return ((item.name, item.parent.name) for item in self._dir.glob("*/*"))
 
     def add_item(
         self, item: BaseModel, *, parent: str | None, id_: str | None = None
