@@ -354,3 +354,35 @@ def test_run_async_generator_func(mode):
     assert report.nodes["word"]["_already_processed"] == 0
     assert report.nodes["word"]["anagram"] == 2  # two moved from word -> anagram
     assert len(p.beakers["anagram"]) == 12  # but 12 were created
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_repair_simple_orphaned(dry_run):
+    p = Pipeline("test", ":memory:")
+    p.add_beaker("a", Word)
+    p.add_beaker("b", Word)
+    p.add_transform("a", "b", lambda x: x)
+
+    # this item flowed a->b
+    p.beakers["a"].add_item(Word(word="in-both"), parent="sr:abc", id_="123")
+    p.beakers["b"].add_item(Word(word="in-both"), parent="123", id_="123")
+
+    # this item only exists in a
+    p.beakers["a"].add_item(Word(word="just-a"), parent="sr:abc", id_="234")
+
+    # this item only exists in b, should be deleted
+    p.beakers["b"].add_item(Word(word="just-b"), parent="456", id_="456")
+
+    # this item only exists in b, but with a seed
+    p.beakers["b"].add_item(Word(word="just-b-seed"), parent="sr:zzz", id_="789")
+
+    assert len(p.beakers["b"]) == 3
+
+    repairs = p.repair(dry_run)
+    assert repairs["b"] == ["456"]
+
+    assert len(p.beakers["a"]) == 2
+    if dry_run:
+        assert len(p.beakers["b"]) == 3  # nothing deleted
+    else:
+        assert len(p.beakers["b"]) == 2

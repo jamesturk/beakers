@@ -391,5 +391,22 @@ def export(
         writer.writerows(output)
 
 
+@app.command()
+def repair(
+    ctx: typer.Context,
+    dry_run: bool = typer.Option(False, "--dry-run", "-d"),
+):
+    """
+    Repair the database.
+    """
+    repaired = ctx.obj.repair(dry_run)
+    if not repaired:
+        typer.secho("Nothing to repair!", fg=typer.colors.GREEN)
+    for beaker, changes in repaired:
+        typer.secho(f"removed {len(changes)} from {beaker}", fg=typer.colors.YELLOW)
+    if dry_run:
+        typer.secho("Dry run; no changes made!", fg=typer.colors.YELLOW)
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

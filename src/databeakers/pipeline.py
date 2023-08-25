@@ -684,6 +684,41 @@ class Pipeline:
                 pydg.add_edge(pydot.Edge(from_b, to_b))
         return pydg
 
+    def repair(self, dry_run: bool) -> dict[str, list[str]]:
+        """
+        Repair the database.
+
+        Returns list of repairs.
+        """
+        seen_ids = set()
+        orphaned = defaultdict(list)
+        for beaker in self._beakers_toposort(None):
+            for id_, parent in self.beakers[beaker].all_ids_and_parents():
+                # every item must either have come from a seed run
+                # or from another beaker that has already been processed
+                if parent.startswith("sr:"):
+                    # TODO: validate that seed run exists
+                    seen_ids.add(id_)
+                    continue
+                elif parent in seen_ids:
+                    seen_ids.add(id_)
+                    # already processed
+                    continue
+                else:
+                    orphaned[beaker].append(id_)
+
+        for beaker, ids in orphaned.items():
+            log.info(
+                "removing orphaned items",
+                beaker=beaker,
+                count=len(ids),
+                dry_run=dry_run,
+            )
+            if not dry_run:
+                self.beakers[beaker].delete(ids=ids)
+
+        return orphaned
+
     # section: helper methods ################################################
 
     def _beakers_toposort(
