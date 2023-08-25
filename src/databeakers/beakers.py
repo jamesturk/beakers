@@ -169,7 +169,7 @@ class SqliteBeaker(Beaker):
         return self._table.count
 
     def parent_id_set(self) -> set[str]:
-        return {row["parent"] for row in self._table.rows}
+        return {row["parent"] for row in self._table.rows_where(select="parent")}
 
     def all_ids(
         self, ordered: bool = False, where: dict[str, str] | None = None
@@ -179,19 +179,22 @@ class SqliteBeaker(Beaker):
                 [f"json_extract(data, '$.{k}') = ?" for k in where.keys()]
             )
             where_vals = list(where.values())
-            rows = self._table.rows_where(where_str, where_vals)
+            rows = self._table.rows_where(where_str, where_vals, select="uuid")
         else:
-            rows = self._table.rows
+            rows = self._table.rows_where(select="uuid")
         ids = [row["uuid"] for row in rows]
         if ordered:
             ids = sorted(ids)
         return ids
 
     def all_ids_and_parents(self) -> Iterable[tuple[str, str]]:
-        return ((row["uuid"], row["parent"]) for row in self._table.rows)
+        return (
+            (row["uuid"], row["parent"])
+            for row in self._table.rows_where(select="uuid, parent")
+        )
 
     def items(self) -> Iterable[tuple[str, BaseModel]]:
-        for item in self._table.rows:
+        for item in self._table.rows_where(select="uuid, data"):
             yield item["uuid"], self.model(**json.loads(item["data"]))
 
     def add_item(
