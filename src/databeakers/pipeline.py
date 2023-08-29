@@ -241,7 +241,7 @@ class Pipeline:
         )
         self.add_out_transform(from_beaker, edge)
 
-    def add_out_transform(self, from_beaker: str, edge: Edge) -> None:
+    def add_out_transform(self, from_beaker: str, edge: Edge) -> Edge:
         """
         Declaration Rules:
         - from_beaker must exist
@@ -345,6 +345,7 @@ class Pipeline:
             edge.to_beaker,
             edge=edge,
         )
+        return edge
 
     def add_splitter(self, from_beaker: str, splitter: Splitter) -> None:
         self.graph.add_node(splitter.name, node_type="split")

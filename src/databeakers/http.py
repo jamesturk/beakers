@@ -69,8 +69,10 @@ class HttpEdge(Transform):
         field: str = "url",
         follow_redirects: bool = True,
         retries: int = 0,
+        headers: dict[str, str] | None = None,
         error_beaker: str = "http_error",
         timeout_beaker: str = "http_timeout",
+        bad_response_beaker: str = "http_bad_response",
         error_map: dict[tuple[type[Exception], ...], str] | None = None,
     ) -> None:
         """
@@ -83,13 +85,17 @@ class HttpEdge(Transform):
         if error_map is None:
             error_map = {}
         error_map[(httpx.TimeoutException,)] = timeout_beaker
-        error_map[(httpx.HTTPError,)] = error_beaker
+        error_map[(httpx.HTTPStatusError,)] = bad_response_beaker
+        error_map[(httpx.RequestError, httpx.InvalidURL)] = error_beaker
 
         super().__init__(
             name=name,
             to_beaker=to_beaker,
             func=HttpRequest(
-                field=field, follow_redirects=follow_redirects, retries=retries
+                field=field,
+                follow_redirects=follow_redirects,
+                retries=retries,
+                headers=headers,
             ),
             error_map=error_map,
             whole_record=False,
