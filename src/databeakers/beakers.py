@@ -131,15 +131,13 @@ class TempBeaker(Beaker):
         self, *, parent: list[str] | None = None, ids: list[str] | None = None
     ) -> list[str]:
         deleted = []
+        everything = parent is None and ids is None
         for id, parent_id in self._parent_ids.items():
-            if parent and parent_id in parent:
-                del self._items[id]
-                del self._parent_ids[id]
+            if (parent and parent_id in parent) or (ids and id in ids) or everything:
                 deleted.append(id)
-            elif ids and id in ids:
-                del self._items[id]
-                del self._parent_ids[id]
-                deleted.append(id)
+        for id in deleted:
+            del self._items[id]
+            del self._parent_ids[id]
         return deleted
 
 
@@ -238,6 +236,9 @@ class SqliteBeaker(Beaker):
             self._table.delete_where(
                 "uuid in ({})".format(",".join("?" * len(ids))), ids
             )
+        else:
+            query_string = "1=1"
+            query_values = []
 
         ids = [
             row["uuid"]

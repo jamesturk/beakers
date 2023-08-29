@@ -37,14 +37,15 @@ def test_items(beakerCls):
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
-def test_reset(beakerCls):
+def test_delete_all(beakerCls):
     pipeline = Pipeline("test", ":memory:")
     beaker = beakerCls("test", Word, pipeline)
-    beaker.add_item(Word(word="one"), parent=None)
-    beaker.add_item(Word(word="two"), parent=None)
+    beaker.add_item(Word(word="one"), parent="sr:a", id_="one")
+    beaker.add_item(Word(word="two"), parent="sr:a", id_="two")
     assert len(beaker) == 2
-    beaker.reset()
+    ids = beaker.delete()
     assert len(beaker) == 0
+    assert ids == ["one", "two"]
 
 
 @pytest.mark.parametrize("beakerCls", [TempBeaker, SqliteBeaker])
