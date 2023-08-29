@@ -65,7 +65,7 @@ class HttpEdge(Transform):
         self,
         to_beaker: str,
         *,
-        name: str = "http",
+        name: str | None = None,
         field: str = "url",
         follow_redirects: bool = True,
         retries: int = 0,

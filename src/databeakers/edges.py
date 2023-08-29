@@ -133,7 +133,13 @@ class Transform(Edge):
         """
         Decorate the transform with a decorator.
         """
+        update_name = self.name == callable_name(self.func)
         self.func = decorator(self.func, *args, **kwargs)
+        if update_name:
+            # decorator presumably changed the function name
+            self.name = callable_name(self.func)
+        else:
+            self.name = f"{decorator.__name__}({self.name})"
         return self
 
 
