@@ -224,18 +224,12 @@ class SqliteBeaker(Beaker):
     def delete(
         self, *, parent: list[str] | None = None, ids: list[str] | None = None
     ) -> list[str]:
-        if parent:
+        if parent is not None:
             query_string = "parent in ({})".format(",".join("?" * len(parent)))
             query_values = parent
-            self._table.delete_where(
-                "parent in ({})".format(",".join("?" * len(parent))), parent
-            )
-        elif ids:
+        elif ids is not None:
             query_string = "uuid in ({})".format(",".join("?" * len(ids)))
             query_values = ids
-            self._table.delete_where(
-                "uuid in ({})".format(",".join("?" * len(ids))), ids
-            )
         else:
             query_string = "1=1"
             query_values = []
@@ -245,8 +239,14 @@ class SqliteBeaker(Beaker):
             for row in self._table.rows_where(query_string, query_values, select="uuid")
         ]
         log.info(
-            "beaker delete where", beaker=self.name, parent=parent, deleted=len(ids)
+            "beaker delete where",
+            beaker=self.name,
+            parent=parent,
+            deleted=len(ids),
+            query_string=query_string,
+            query_values=query_values,
         )
+
         self._table.delete_where(query_string, query_values)
 
         return ids

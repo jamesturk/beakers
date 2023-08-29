@@ -386,3 +386,46 @@ def test_repair_simple_orphaned(dry_run):
         assert len(p.beakers["b"]) == 3  # nothing deleted
     else:
         assert len(p.beakers["b"]) == 2
+
+
+def test_delete_forward_propagate_ids(wc_pipeline):
+    wc_pipeline.add_transform("word", "capitalized", capitalized)
+    wc_pipeline.beakers["word"].add_item(Word(word="apple"), parent="sr:abc", id_="123")
+    wc_pipeline.beakers["word"].add_item(
+        Word(word="banana"), parent="sr:abc", id_="555"
+    )
+    wc_pipeline.run(RunMode.waterfall)
+
+    assert len(wc_pipeline.beakers["word"]) == 2
+    assert len(wc_pipeline.beakers["capitalized"]) == 2
+    wc_pipeline.delete_from_beaker("word", ids=["123"])
+    assert len(wc_pipeline.beakers["word"]) == 1
+    assert len(wc_pipeline.beakers["capitalized"]) == 1
+
+
+def test_delete_forward_propagate_parent(wc_pipeline):
+    wc_pipeline.add_transform("word", "capitalized", capitalized)
+    wc_pipeline.beakers["word"].add_item(Word(word="apple"), parent="sr:a", id_="123")
+    wc_pipeline.beakers["word"].add_item(Word(word="axe"), parent="sr:a", id_="555")
+    wc_pipeline.beakers["word"].add_item(Word(word="zebra"), parent="sr:z", id_="999")
+    wc_pipeline.run(RunMode.waterfall)
+
+    assert len(wc_pipeline.beakers["word"]) == 3
+    assert len(wc_pipeline.beakers["capitalized"]) == 3
+    wc_pipeline.delete_from_beaker("word", parent=["sr:a"])
+    assert len(wc_pipeline.beakers["word"]) == 1
+    assert len(wc_pipeline.beakers["capitalized"]) == 1
+
+
+def test_delete_forward_propagate_all(wc_pipeline):
+    wc_pipeline.add_transform("word", "capitalized", capitalized)
+    wc_pipeline.beakers["word"].add_item(Word(word="apple"), parent="sr:a", id_="123")
+    wc_pipeline.beakers["word"].add_item(Word(word="axe"), parent="sr:a", id_="555")
+    wc_pipeline.beakers["word"].add_item(Word(word="zebra"), parent="sr:z", id_="999")
+    wc_pipeline.run(RunMode.waterfall)
+
+    assert len(wc_pipeline.beakers["word"]) == 3
+    assert len(wc_pipeline.beakers["capitalized"]) == 3
+    wc_pipeline.delete_from_beaker("word")
+    assert len(wc_pipeline.beakers["word"]) == 0
+    assert len(wc_pipeline.beakers["capitalized"]) == 0
