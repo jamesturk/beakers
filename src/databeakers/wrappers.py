@@ -100,29 +100,24 @@ class AdaptiveRateLimit:
             raise e
 
 
-class Retry:
+def Retry(edge_func, retries):
     """
     Retry an edge a number of times.
     """
 
-    def __init__(self, edge_func, retries=1):
-        self.edge_func = edge_func
-        self.retries = retries
-
-    def __repr__(self):
-        return f"Retry({callable_name(self.edge_func)}, {self.retries})"
-
-    async def __call__(self, item: BaseModel) -> BaseModel:
+    @functools.wraps(edge_func)
+    async def new_func(item):
         exception = None
-        for n in range(self.retries + 1):
+        for n in range(retries + 1):
             try:
-                return await self.edge_func(item)
+                return await edge_func(item)
             except Exception as e:
                 exception = e
-                log.error(
-                    "Retry", exception=str(e), retry=n + 1, max_retries=self.retries
-                )
+                log.error("Retry", exception=str(e), retry=n + 1, max_retries=retries)
         # if we get here, we've exhausted our retries
         # (conditional appeases mypy)
         if exception:
             raise exception
+
+    new_func.__name__ = f"Retry({callable_name(edge_func)}, {retries})"
+    return new_func

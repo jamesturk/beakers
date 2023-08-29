@@ -91,7 +91,7 @@ def test_retry_repr():
         return item
 
     retry = Retry(edge_func, retries=1)
-    assert repr(retry) == "Retry(edge_func, 1)"
+    assert callable_name(retry) == "Retry(edge_func, 1)"
 
 
 def test_retry_annotation():
@@ -103,7 +103,7 @@ def test_retry_annotation():
 
 
 def test_stacked_repr():
-    assert repr(Retry(RateLimit(HttpRequest()), retries=1)) == (
+    assert callable_name(Retry(RateLimit(HttpRequest()), retries=1)) == (
         "Retry(RateLimit(HttpRequest(url), 1), 1)"
     )
 
