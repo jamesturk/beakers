@@ -140,8 +140,9 @@ class Pipeline:
 
         beaker = self.beakers[seed.beaker_name]
         if reset:
+            # remove record of run, delete beaker items
             self._seeds_t.delete_where("run_repr = ?", [run_repr])
-            beaker.delete(parent=run_repr)
+            self.delete_from_beaker(seed.beaker_name, parent=[run_repr])
 
         if already_run := self.get_seed_run(run_repr):
             raise SeedError(f"Seed {seed_name} already run: {already_run}")
@@ -165,8 +166,7 @@ class Pipeline:
             error = str(e) or repr(e)
 
             if not save_bad_runs:
-                # need to delete the beaker items
-                beaker.delete(parent=run_repr)
+                self.delete_from_beaker(seed.beaker_name, parent=[run_repr])
                 num_items = 0
             else:
                 # tail items won't be saved
@@ -631,6 +631,25 @@ class Pipeline:
 
     # section: commands #######################################################
 
+    def delete_from_beaker(
+        self,
+        beaker_name: str,
+        *,
+        parent: list[str] | None = None,
+        ids: list[str] | None = None,
+    ) -> None:
+        """
+        Delete items from a beaker, cascading to downstream beakers.
+
+        Args:
+            beaker_name: name of beaker to delete from
+            parent: parent of items to delete
+            ids: ids of items to delete
+        """
+        ids = self.beakers[beaker_name].delete(parent=parent, ids=ids)
+        for edge in self._out_edges(beaker_name):
+            self.delete_from_beaker(edge.to_beaker, parent=ids)
+
     def reset(self) -> list[str]:
         reset_list = []
         # transaction around entire reset
@@ -718,7 +737,7 @@ class Pipeline:
                 dry_run=dry_run,
             )
             if not dry_run:
-                self.beakers[beaker].delete(ids=ids)
+                self.delete_from_beaker(beaker, ids=ids)
 
         return orphaned
 

@@ -72,7 +72,9 @@ class Beaker(abc.ABC):
         """
 
     @abc.abstractmethod
-    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
+    def delete(
+        self, *, parent: list[str] | None = None, ids: list[str] | None = None
+    ) -> list[str]:
         """
         Delete all items with the given parent id.
 
@@ -135,17 +137,19 @@ class TempBeaker(Beaker):
         except KeyError:
             raise ItemNotFound(f"{id} not found in {self.name}")
 
-    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
-        deleted = 0
+    def delete(
+        self, *, parent: list[str] | None = None, ids: list[str] | None = None
+    ) -> list[str]:
+        deleted = []
         for id, parent_id in self._parent_ids.items():
-            if parent and parent_id == parent:
+            if parent and parent_id in parent:
                 del self._items[id]
                 del self._parent_ids[id]
-                deleted += 1
+                deleted.append(id)
             elif ids and id in ids:
                 del self._items[id]
                 del self._parent_ids[id]
-                deleted += 1
+                deleted.append(id)
         return deleted
 
 
@@ -233,22 +237,32 @@ class SqliteBeaker(Beaker):
         log.info("beaker cleared", beaker=self.name)
         self._table.delete_where()
 
-    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
-        before = self._table.count
+    def delete(
+        self, *, parent: list[str] | None = None, ids: list[str] | None = None
+    ) -> list[str]:
         if parent:
-            self._table.delete_where("parent=?", (parent,))
+            query_string = "parent in ({})".format(",".join("?" * len(parent)))
+            query_values = parent
+            self._table.delete_where(
+                "parent in ({})".format(",".join("?" * len(parent))), parent
+            )
         elif ids:
+            query_string = "uuid in ({})".format(",".join("?" * len(ids)))
+            query_values = ids
             self._table.delete_where(
                 "uuid in ({})".format(",".join("?" * len(ids))), ids
             )
-        after = self._table.count
+
+        ids = [
+            row["uuid"]
+            for row in self._table.rows_where(query_string, query_values, select="uuid")
+        ]
         log.info(
-            "beaker delete where",
-            beaker=self.name,
-            parent=parent,
-            deleted=before - after,
+            "beaker delete where", beaker=self.name, parent=parent, deleted=len(ids)
         )
-        return before - after
+        self._table.delete_where(query_string, query_values)
+
+        return ids
 
 
 class DirectoryBeaker(Beaker):
@@ -315,5 +329,7 @@ class DirectoryBeaker(Beaker):
     def reset(self) -> None:
         raise NotImplementedError("DirectoryBeaker.reset() not implemented")
 
-    def delete(self, *, parent: str | None = None, ids: list[str] | None = None) -> int:
+    def delete(
+        self, *, parent: list[str] | None = None, ids: list[str] | None = None
+    ) -> list[str]:
         raise NotImplementedError("DirectoryBeaker.delete() not implemented")
