@@ -129,6 +129,13 @@ class Transform(Edge):
     def out_beakers(self) -> set[str]:
         return {self.to_beaker} | set(self.error_map.values())
 
+    def decorate(self, decorator: Callable, *args, **kwargs) -> "Transform":
+        """
+        Decorate the transform with a decorator.
+        """
+        self.func = decorator(self.func, *args, **kwargs)
+        return self
+
 
 class Splitter(Edge):
     func: Callable
