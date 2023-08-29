@@ -89,3 +89,28 @@ def test_stacked_repr():
     assert repr(Retry(RateLimit(HttpRequest()), retries=1)) == (
         "Retry(RateLimit(HttpRequest(url), 1), 1)"
     )
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_and_retry():
+    calls = 0
+
+    async def fail_twice(item):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise ValueError("fail")
+        return item
+
+    # this order matters, the rate limit should be applied first
+    # so that retry can't happen until the rate limit is satisfied
+    both = Retry(RateLimit(fail_twice, requests_per_second=10), retries=2)
+    # should have slept twice
+    await assert_time_diff_between(lambda: both("x"), 0.2, 0.3)
+    assert await both("x") == "x"
+    # 2 retries and 2 successes
+    assert calls == 4
+
+
+# @pytest.mark.asyncio
+# async def test_
