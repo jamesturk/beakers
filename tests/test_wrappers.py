@@ -1,7 +1,7 @@
 import time
 import pytest
 from databeakers.http import HttpRequest
-from databeakers.wrappers import RateLimit, Retry
+from databeakers.wrappers import RateLimit, Retry, AdaptiveRateLimit
 
 
 async def assert_time_diff_between(func, min_diff, max_diff):
@@ -112,5 +112,62 @@ async def test_rate_limit_and_retry():
     assert calls == 4
 
 
-# @pytest.mark.asyncio
-# async def test_
+@pytest.mark.asyncio
+async def test_adaptive_rate_limit_slows_down():
+    calls = 0
+
+    async def fail_twice(item):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise ValueError("fail")
+        return item
+
+    adaptive_rate_limit = Retry(
+        AdaptiveRateLimit(
+            fail_twice,
+            timeout_exceptions=(ValueError,),
+            requests_per_second=20,
+            back_off_rate=2,
+        ),
+        retries=2,
+    )
+    # initial speed is 20/s = 0.05s sleep
+    # so after two failures should have slept twice, 0.1s and 0.2s
+    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.3, 0.4)
+    assert await adaptive_rate_limit("x") == "x"
+    # 2 retries and 2 successes
+    assert calls == 4
+
+
+@pytest.mark.asyncio
+async def test_adaptive_rate_limit_speeds_up():
+    calls = 0
+
+    async def fail_twice(item):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise ValueError("fail")
+        return item
+
+    adaptive_rate_limit = Retry(
+        AdaptiveRateLimit(
+            fail_twice,
+            timeout_exceptions=(ValueError,),
+            requests_per_second=20,
+            back_off_rate=2,
+            speed_up_after=2,
+        ),
+        retries=2,
+    )
+    # initial speed is 20/s = 0.05s sleep
+    # so after two failures should have slept twice, 0.1s and 0.2s
+    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.3, 0.4)
+    # will sleep 0.2 again on next call
+    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.2, 0.3)
+    # with two successes, should speed up
+    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.1, 0.2)
+    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.1, 0.2)
+    # and two more, back to intended speed
+    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.05, 0.1)

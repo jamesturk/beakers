@@ -22,9 +22,7 @@ class RateLimit:
         return f"RateLimit({callable_name(self.edge_func)}, {self.requests_per_second})"
 
     async def __call__(self, item: BaseModel) -> BaseModel:
-        if self.last_call is None:
-            self.last_call = time.time()
-        else:
+        if self.last_call is not None:
             diff = (1 / self.requests_per_second) - (time.time() - self.last_call)
             if diff > 0:
                 log.debug("RateLimit sleep", seconds=diff, last_call=self.last_call)
@@ -34,6 +32,76 @@ class RateLimit:
         if inspect.isawaitable(result):
             return await result
         return result
+
+
+class AdaptiveRateLimit:
+    """ """
+
+    def __init__(
+        self,
+        edge_func,
+        timeout_exceptions,
+        *,
+        requests_per_second=1,
+        back_off_rate=2,
+        speed_up_after=1,
+    ):
+        self.edge_func = edge_func
+        self.requests_per_second = requests_per_second
+        self.desired_requests_per_second = requests_per_second
+        self.timeout_exceptions = timeout_exceptions
+        self.back_off_rate = back_off_rate
+        self.speed_up_after = speed_up_after
+        self.successes_counter = 0
+        self.last_call = None
+        """
+        - slow down by factor of back_off_rate on timeout
+        - speed up by factor of back_off_rate on speed_up_after success
+        """
+
+    def __repr__(self):
+        return f"AdaptiveRateLimit({callable_name(self.edge_func)}, {self.requests_per_second})"
+
+    async def __call__(self, item: BaseModel) -> BaseModel:
+        if self.last_call is not None:
+            diff = (1 / self.requests_per_second) - (time.time() - self.last_call)
+            if diff > 0:
+                log.debug(
+                    "AdaptiveRateLimit sleep",
+                    seconds=diff,
+                    last_call=self.last_call,
+                    streak=self.successes_counter,
+                )
+                await asyncio.sleep(diff)
+        self.last_call = time.time()
+
+        try:
+            result = self.edge_func(item)
+            if inspect.isawaitable(result):
+                result = await result
+
+            # check if we should speed up
+            self.successes_counter += 1
+            if (
+                self.successes_counter >= self.speed_up_after
+                and self.requests_per_second < self.desired_requests_per_second
+            ):
+                self.successes_counter = 0
+                self.requests_per_second *= self.back_off_rate
+                log.warning(
+                    "AdaptiveRateLimit speed up",
+                    requests_per_second=self.requests_per_second,
+                )
+
+            return result
+        except self.timeout_exceptions as e:
+            self.requests_per_second /= self.back_off_rate
+            log.warning(
+                "AdaptiveRateLimit slow down",
+                exception=str(e),
+                requests_per_second=self.requests_per_second,
+            )
+            raise e
 
 
 class Retry:
