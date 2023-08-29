@@ -755,11 +755,15 @@ class Pipeline:
         the alternative is to store all records in memory.
         """
         rec = Record(id=id)
+        exists = False
         for beaker_name, beaker in self.beakers.items():
             try:
                 rec[beaker_name] = beaker.get_item(id)
+                exists = True
             except ItemNotFound:
                 pass
+        if not exists:
+            raise ItemNotFound(id)
         return rec
 
     def _grab_rows(

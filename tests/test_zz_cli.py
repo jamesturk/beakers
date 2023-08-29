@@ -264,21 +264,6 @@ def test_peek_beaker_join_beakers():
     assert "sentence_sentence" in result.output
 
 
-def test_peek_item():
-    fruits.reset()
-    # full run through abc
-    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
-    ids = fruits.beakers["word"].all_ids()
-    assert len(ids) == 3
-    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
-    assert result.exit_code == 0
-
-    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "peek", ids[0]])
-    assert result.exit_code == 0
-    assert ids[0] in result.output
-    assert "apple is a delicious... (27)"
-
-
 def test_peek_beaker_params():
     fruits.reset()
     runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
@@ -293,3 +278,65 @@ def test_peek_beaker_params():
     assert "word [word=apple] (1)" in result.output
     assert "apple" in result.output
     assert "BANANA" not in result.output
+
+
+def test_peek_item():
+    fruits.reset()
+    # full run through abc
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    ids = fruits.beakers["word"].all_ids()
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "peek", ids[0]])
+    print(result.output)
+    assert result.exit_code == 0
+    assert ids[0] in result.output
+    assert "apple is a delicious fruit" in result.output
+
+
+def test_peek_item_bad_uuid():
+    fruits.reset()
+
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "peek", "abc"])
+    print(result.output)
+    assert result.exit_code == 1
+    assert "Unknown entity: abc" in result.output
+
+
+def test_peek_item_non_existent():
+    fruits.reset()
+
+    bad_id = "00000000-0000-0000-0000-000000000000"
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "peek", bad_id])
+    print(result.output)
+    assert result.exit_code == 1
+    assert bad_id in result.output
+
+
+def test_peek_item_beaker():
+    fruits.reset()
+    # full run through abc
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    ids = fruits.beakers["word"].all_ids()
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "peek", ids[0] + ".word"]
+    )
+    print(result.output)
+    assert result.exit_code == 0
+    assert "apple" in result.output
+
+
+def test_peek_item_beaker_record():
+    fruits.reset()
+    # full run through abc
+    runner.invoke(app, ["--pipeline", "tests.examples.fruits", "seed", "abc"])
+    ids = fruits.beakers["word"].all_ids()
+    result = runner.invoke(app, ["--pipeline", "tests.examples.fruits", "run"])
+
+    result = runner.invoke(
+        app, ["--pipeline", "tests.examples.fruits", "peek", ids[0] + ".word.word"]
+    )
+    assert result.exit_code == 0
+    assert "apple\n" == result.output

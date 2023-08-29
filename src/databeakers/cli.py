@@ -15,7 +15,7 @@ from typing_extensions import Annotated
 
 
 from ._models import RunMode
-from .exceptions import SeedError, InvalidGraph
+from .exceptions import SeedError, InvalidGraph, ItemNotFound
 from .config import load_config
 from .pipeline import Pipeline
 from .beakers import TempBeaker
@@ -285,7 +285,15 @@ def clear(
             typer.secho(f"Cleared {beaker_name}", fg=typer.colors.GREEN)
 
 
-uuid_re = re.compile(r"^[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12}$")
+uuid_re = re.compile(
+    r"""
+^
+(?P<uuid>[0-9a-f]{8}-([0-9a-f]{4}-){3}[0-9a-f]{12})  # UUID
+(\.(?P<beaker>[a-zA-Z0-9_]+))?  # optional beaker name
+(\.(?P<field>[a-zA-Z0-9_]+))?  # optional field name
+$""",
+    re.VERBOSE,
+)
 
 
 @app.command()
@@ -340,28 +348,61 @@ def peek(
                 fields.append(str(value))
             t.add_row(*fields)
         print(t)
-    elif uuid_re.match(thing):
-        record = ctx.obj._get_full_record(thing)
-        t = Table(title=thing, show_header=False, show_lines=False)
-        t.add_column("Beaker", style="cyan")
-        t.add_column("Field")
-        t.add_column("Value")
-        for beaker_name in ctx.obj.beakers:
+    elif parts := uuid_re.match(thing):
+        uuid = parts.group("uuid")
+        beaker_name = parts.group("beaker")
+        field_name = parts.group("field")
+
+        try:
+            record = ctx.obj._get_full_record(uuid)
+        except ItemNotFound:
+            typer.secho(f"Unknown UUID: {uuid}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        if field_name:
             try:
-                record[beaker_name]
-                t.add_row(beaker_name, "", "")
-                for field in record[beaker_name].model_fields:
-                    value = getattr(record[beaker_name], field)
-                    if isinstance(value, str):
-                        value = (
-                            value[:max_length] + f"... ({len(value)})"
-                            if len(value) > max_length
-                            else value
-                        )
-                    t.add_row("", field, str(value))
+                print(getattr(record[beaker_name], field_name))
             except KeyError:
-                pass
-        print(t)
+                typer.secho(
+                    f"Unknown field {field_name} for beaker {beaker_name}",
+                    fg=typer.colors.RED,
+                )
+                raise typer.Exit(1)
+        elif beaker_name:
+            t = Table(title=thing, show_header=False, show_lines=False)
+            t.add_column("Field")
+            t.add_column("Value")
+            for field in record[beaker_name].model_fields:
+                value = getattr(record[beaker_name], field)
+                if isinstance(value, str):
+                    value = (
+                        value[:max_length] + f"... ({len(value)})"
+                        if len(value) > max_length
+                        else value
+                    )
+                t.add_row(field, str(value))
+            print(t)
+        elif record:
+            t = Table(title=thing, show_header=False, show_lines=False)
+            t.add_column("Beaker", style="cyan")
+            t.add_column("Field")
+            t.add_column("Value")
+            for beaker_name in ctx.obj.beakers:
+                try:
+                    record[beaker_name]
+                    t.add_row(beaker_name, "", "")
+                    for field in record[beaker_name].model_fields:
+                        value = getattr(record[beaker_name], field)
+                        if isinstance(value, str):
+                            value = (
+                                value[:max_length] + f"... ({len(value)})"
+                                if len(value) > max_length
+                                else value
+                            )
+                        t.add_row("", field, str(value))
+                except KeyError:
+                    pass
+            print(t)
     else:
         typer.secho(f"Unknown entity: {thing}", fg=typer.colors.RED)
         raise typer.Exit(1)
