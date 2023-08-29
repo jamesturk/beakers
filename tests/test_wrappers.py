@@ -2,6 +2,7 @@ import time
 import pytest
 from databeakers.http import HttpRequest
 from databeakers.wrappers import RateLimit, Retry, AdaptiveRateLimit
+from databeakers._utils import callable_name
 
 
 async def assert_time_diff_between(func, min_diff, max_diff):
@@ -38,9 +39,17 @@ async def test_rate_limit_async_edge_func():
     await assert_time_diff_between(lambda: rate_limit("x"), 0.1, 0.2)
 
 
-def test_rate_limit_repr():
+def test_rate_limit_name():
     rate_limit = RateLimit(lambda x: x, requests_per_second=10)
-    assert repr(rate_limit) == "RateLimit(λ, 10)"
+    assert callable_name(rate_limit) == "RateLimit(λ, 10)"
+
+
+def test_rate_limit_annotations():
+    def edge_func(item: int) -> int:
+        return item
+
+    retry = RateLimit(edge_func)
+    assert edge_func.__annotations__ == retry.__annotations__
 
 
 @pytest.mark.asyncio
@@ -83,6 +92,14 @@ def test_retry_repr():
 
     retry = Retry(edge_func, retries=1)
     assert repr(retry) == "Retry(edge_func, 1)"
+
+
+def test_retry_annotation():
+    def edge_func(item: int) -> int:
+        return item
+
+    retry = Retry(edge_func, retries=1)
+    assert edge_func.__annotations__ == retry.__annotations__
 
 
 def test_stacked_repr():

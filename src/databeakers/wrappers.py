@@ -1,6 +1,7 @@
 import time
 import asyncio
 import inspect
+import functools
 from pydantic import BaseModel
 from structlog import get_logger
 from ._utils import callable_name
@@ -8,30 +9,25 @@ from ._utils import callable_name
 log = get_logger()
 
 
-class RateLimit:
-    """
-    Limit the rate of flow based on the last call time.
-    """
+def RateLimit(edge_func, requests_per_second=1):
+    last_call = None
 
-    def __init__(self, edge_func, requests_per_second=1):
-        self.edge_func = edge_func
-        self.requests_per_second = requests_per_second
-        self.last_call = None
-
-    def __repr__(self):
-        return f"RateLimit({callable_name(self.edge_func)}, {self.requests_per_second})"
-
-    async def __call__(self, item: BaseModel) -> BaseModel:
-        if self.last_call is not None:
-            diff = (1 / self.requests_per_second) - (time.time() - self.last_call)
+    @functools.wraps(edge_func)
+    async def new_func(item):
+        nonlocal last_call
+        if last_call is not None:
+            diff = (1 / requests_per_second) - (time.time() - last_call)
             if diff > 0:
-                log.debug("RateLimit sleep", seconds=diff, last_call=self.last_call)
+                log.debug("RateLimit sleep", seconds=diff, last_call=last_call)
                 await asyncio.sleep(diff)
-        self.last_call = time.time()
-        result = self.edge_func(item)
+        last_call = time.time()
+        result = edge_func(item)
         if inspect.isawaitable(result):
             return await result
         return result
+
+    new_func.__name__ = f"RateLimit({callable_name(edge_func)}, {requests_per_second})"
+    return new_func
 
 
 class AdaptiveRateLimit:
