@@ -659,7 +659,7 @@ class Pipeline:
             for beaker in self.beakers.values():
                 if bl := len(beaker):
                     log.info("resetting", beaker=beaker.name, count=bl)
-                    beaker.reset()
+                    beaker.delete()
                     reset_list.append(f"{beaker.name} ({bl})")
         return reset_list
 

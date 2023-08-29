@@ -81,12 +81,6 @@ class Beaker(abc.ABC):
         Return number of items deleted.
         """
 
-    @abc.abstractmethod
-    def reset(self) -> None:
-        """
-        Reset the beaker to empty.
-        """
-
 
 class TempBeaker(Beaker):
     def __init__(self, name: str, model: PydanticModel, pipeline: "Pipeline"):
@@ -126,10 +120,6 @@ class TempBeaker(Beaker):
 
     def items(self) -> Iterable[tuple[str, BaseModel]]:
         yield from self._items.items()
-
-    def reset(self) -> None:
-        self._items = {}
-        self._parent_ids = {}
 
     def get_item(self, id: str) -> BaseModel:
         try:
@@ -233,10 +223,6 @@ class SqliteBeaker(Beaker):
             raise ItemNotFound(f"{id} not found in {self.name}")
         return self.model(**json.loads(row["data"]))
 
-    def reset(self) -> None:
-        log.info("beaker cleared", beaker=self.name)
-        self._table.delete_where()
-
     def delete(
         self, *, parent: list[str] | None = None, ids: list[str] | None = None
     ) -> list[str]:
@@ -325,9 +311,6 @@ class DirectoryBeaker(Beaker):
 
     def items(self) -> Iterable[tuple[str, BaseModel]]:
         raise NotImplementedError("DirectoryBeaker.items() not implemented")
-
-    def reset(self) -> None:
-        raise NotImplementedError("DirectoryBeaker.reset() not implemented")
 
     def delete(
         self, *, parent: list[str] | None = None, ids: list[str] | None = None
