@@ -1,7 +1,7 @@
 import time
 import pytest
 from databeakers.http import HttpRequest
-from databeakers.wrappers import RateLimit, Retry, adaptive_rate_limit
+from databeakers.decorators import rate_limit, retry, adaptive_rate_limit
 from databeakers._utils import callable_name
 
 
@@ -18,12 +18,12 @@ async def test_rate_limit_sync_edge_func():
     def edge_func(item):
         return item
 
-    rate_limit = RateLimit(edge_func, requests_per_second=10)
+    rl = rate_limit(edge_func, requests_per_second=10)
 
     # ensure that the first call is not delayed
-    await assert_time_diff_between(lambda: rate_limit("x"), 0, 0.001)
+    await assert_time_diff_between(lambda: rl("x"), 0, 0.001)
     # ensure that the second call is delayed
-    await assert_time_diff_between(lambda: rate_limit("x"), 0.1, 0.2)
+    await assert_time_diff_between(lambda: rl("x"), 0.1, 0.2)
 
 
 @pytest.mark.asyncio
@@ -31,25 +31,25 @@ async def test_rate_limit_async_edge_func():
     async def edge_func(item):
         return item
 
-    rate_limit = RateLimit(edge_func, requests_per_second=10)
+    rl = rate_limit(edge_func, requests_per_second=10)
 
     # ensure that the first call is not delayed
-    await assert_time_diff_between(lambda: rate_limit("x"), 0, 0.001)
+    await assert_time_diff_between(lambda: rl("x"), 0, 0.001)
     # ensure that the second call is delayed
-    await assert_time_diff_between(lambda: rate_limit("x"), 0.1, 0.2)
+    await assert_time_diff_between(lambda: rl("x"), 0.1, 0.2)
 
 
 def test_rate_limit_name():
-    rate_limit = RateLimit(lambda x: x, requests_per_second=10)
-    assert callable_name(rate_limit) == "rate_limit(λ, 10)"
+    rl = rate_limit(lambda x: x, requests_per_second=10)
+    assert callable_name(rl) == "rate_limit(λ, 10)"
 
 
 def test_rate_limit_annotations():
     def edge_func(item: int) -> int:
         return item
 
-    retry = RateLimit(edge_func)
-    assert edge_func.__annotations__ == retry.__annotations__
+    r = rate_limit(edge_func)
+    assert edge_func.__annotations__ == r.__annotations__
 
 
 @pytest.mark.asyncio
@@ -64,8 +64,8 @@ async def test_retry_and_succeed():
         return item
 
     # need to retry 2 times to succeed
-    retry = Retry(fail_twice, retries=2)
-    assert await retry("x") == "x"
+    r = retry(fail_twice, retries=2)
+    assert await r("x") == "x"
     assert calls == 3
 
 
@@ -80,9 +80,9 @@ async def test_retry_and_still_fail():
             raise ValueError("fail")
         return item
 
-    retry = Retry(fail_twice, retries=1)
+    r = retry(fail_twice, retries=1)
     with pytest.raises(ValueError):
-        await retry("x")
+        await r("x")
     assert calls == 2
 
 
@@ -90,20 +90,20 @@ def test_retry_repr():
     def edge_func(item):
         return item
 
-    retry = Retry(edge_func, retries=1)
-    assert callable_name(retry) == "retry(edge_func, 1)"
+    r = retry(edge_func, retries=1)
+    assert callable_name(r) == "retry(edge_func, 1)"
 
 
 def test_retry_annotation():
     def edge_func(item: int) -> int:
         return item
 
-    retry = Retry(edge_func, retries=1)
-    assert edge_func.__annotations__ == retry.__annotations__
+    r = retry(edge_func, retries=1)
+    assert edge_func.__annotations__ == r.__annotations__
 
 
 def test_stacked_repr():
-    assert callable_name(Retry(RateLimit(HttpRequest()), retries=1)) == (
+    assert callable_name(retry(rate_limit(HttpRequest()), retries=1)) == (
         "retry(rate_limit(HttpRequest(url), 1), 1)"
     )
 
@@ -121,7 +121,7 @@ async def test_rate_limit_and_retry():
 
     # this order matters, the rate limit should be applied first
     # so that retry can't happen until the rate limit is satisfied
-    both = Retry(RateLimit(fail_twice, requests_per_second=10), retries=2)
+    both = retry(rate_limit(fail_twice, requests_per_second=10), retries=2)
     # should have slept twice
     await assert_time_diff_between(lambda: both("x"), 0.2, 0.3)
     assert await both("x") == "x"
@@ -140,7 +140,7 @@ async def test_adaptive_rate_limit_slows_down():
             raise ValueError("fail")
         return item
 
-    arl = Retry(
+    arl = retry(
         adaptive_rate_limit(
             fail_twice,
             timeout_exceptions=(ValueError,),
@@ -168,7 +168,7 @@ async def test_adaptive_rate_limit_speeds_up():
             raise ValueError("fail")
         return item
 
-    arl = Retry(
+    arl = retry(
         adaptive_rate_limit(
             fail_twice,
             timeout_exceptions=(ValueError,),

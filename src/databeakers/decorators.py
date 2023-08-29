@@ -8,7 +8,7 @@ from ._utils import callable_name
 log = get_logger()
 
 
-def RateLimit(edge_func, requests_per_second=1):
+def rate_limit(edge_func, requests_per_second=1):
     last_call = None
 
     @functools.wraps(edge_func)
@@ -96,7 +96,7 @@ def adaptive_rate_limit(
     return new_func
 
 
-def Retry(edge_func, retries):
+def retry(edge_func, retries):
     """
     Retry an edge a number of times.
     """
