@@ -1,7 +1,7 @@
 import time
 import pytest
 from databeakers.http import HttpRequest
-from databeakers.wrappers import RateLimit, Retry, AdaptiveRateLimit
+from databeakers.wrappers import RateLimit, Retry, adaptive_rate_limit
 from databeakers._utils import callable_name
 
 
@@ -41,7 +41,7 @@ async def test_rate_limit_async_edge_func():
 
 def test_rate_limit_name():
     rate_limit = RateLimit(lambda x: x, requests_per_second=10)
-    assert callable_name(rate_limit) == "RateLimit(λ, 10)"
+    assert callable_name(rate_limit) == "rate_limit(λ, 10)"
 
 
 def test_rate_limit_annotations():
@@ -91,7 +91,7 @@ def test_retry_repr():
         return item
 
     retry = Retry(edge_func, retries=1)
-    assert callable_name(retry) == "Retry(edge_func, 1)"
+    assert callable_name(retry) == "retry(edge_func, 1)"
 
 
 def test_retry_annotation():
@@ -104,7 +104,7 @@ def test_retry_annotation():
 
 def test_stacked_repr():
     assert callable_name(Retry(RateLimit(HttpRequest()), retries=1)) == (
-        "Retry(RateLimit(HttpRequest(url), 1), 1)"
+        "retry(rate_limit(HttpRequest(url), 1), 1)"
     )
 
 
@@ -140,8 +140,8 @@ async def test_adaptive_rate_limit_slows_down():
             raise ValueError("fail")
         return item
 
-    adaptive_rate_limit = Retry(
-        AdaptiveRateLimit(
+    arl = Retry(
+        adaptive_rate_limit(
             fail_twice,
             timeout_exceptions=(ValueError,),
             requests_per_second=20,
@@ -151,8 +151,8 @@ async def test_adaptive_rate_limit_slows_down():
     )
     # initial speed is 20/s = 0.05s sleep
     # so after two failures should have slept twice, 0.1s and 0.2s
-    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.3, 0.4)
-    assert await adaptive_rate_limit("x") == "x"
+    await assert_time_diff_between(lambda: arl("x"), 0.3, 0.4)
+    assert await arl("x") == "x"
     # 2 retries and 2 successes
     assert calls == 4
 
@@ -168,8 +168,8 @@ async def test_adaptive_rate_limit_speeds_up():
             raise ValueError("fail")
         return item
 
-    adaptive_rate_limit = Retry(
-        AdaptiveRateLimit(
+    arl = Retry(
+        adaptive_rate_limit(
             fail_twice,
             timeout_exceptions=(ValueError,),
             requests_per_second=20,
@@ -180,11 +180,11 @@ async def test_adaptive_rate_limit_speeds_up():
     )
     # initial speed is 20/s = 0.05s sleep
     # so after two failures should have slept twice, 0.1s and 0.2s
-    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.3, 0.4)
+    await assert_time_diff_between(lambda: arl("x"), 0.3, 0.4)
     # will sleep 0.2 again on next call
-    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.2, 0.3)
+    await assert_time_diff_between(lambda: arl("x"), 0.2, 0.3)
     # with two successes, should speed up
-    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.1, 0.2)
-    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.1, 0.2)
+    await assert_time_diff_between(lambda: arl("x"), 0.1, 0.2)
+    await assert_time_diff_between(lambda: arl("x"), 0.1, 0.2)
     # and two more, back to intended speed
-    await assert_time_diff_between(lambda: adaptive_rate_limit("x"), 0.05, 0.1)
+    await assert_time_diff_between(lambda: arl("x"), 0.05, 0.1)
