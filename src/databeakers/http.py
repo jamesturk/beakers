@@ -56,28 +56,42 @@ class HttpRequest:
         )
 
 
-def make_http_edge(
-    name,
-    to_beaker: str,
-    *,
-    whole_record: bool = False,
-    # HttpRequest args
-    field: str = "url",
-    follow_redirects: bool = True,
-    retries: int = 0,
-    error_beaker: str = "http_error",
-    timeout_beaker: str = "http_timeout",
-) -> Transform:
-    return Transform(
-        name=name,
-        to_beaker=to_beaker,
-        func=HttpRequest(
-            field=field, follow_redirects=follow_redirects, retries=retries
-        ),
-        error_map={
-            (httpx.TimeoutException,): timeout_beaker,
-            (httpx.HTTPError,): error_beaker,
-        },
-        whole_record=whole_record,
-        allow_filter=False,
-    )
+class HttpEdge(Transform):
+    """
+    Edge that converts from a beaker with a URL to a beaker with an HTTP response.
+    """
+
+    def __init__(
+        self,
+        to_beaker: str,
+        *,
+        name: str = "http",
+        field: str = "url",
+        follow_redirects: bool = True,
+        retries: int = 0,
+        error_beaker: str = "http_error",
+        timeout_beaker: str = "http_timeout",
+        error_map: dict[tuple[type[Exception], ...], str] | None = None,
+    ) -> None:
+        """
+        Args:
+            name: The name of the edge.
+            to_beaker: The name of the beaker to convert to.
+            field: The name of the field in the beaker that contains the URL.
+            follow_redirects: Whether to follow redirects.
+        """
+        if error_map is None:
+            error_map = {}
+        error_map[(httpx.TimeoutException,)] = timeout_beaker
+        error_map[(httpx.HTTPError,)] = error_beaker
+
+        super().__init__(
+            name=name,
+            to_beaker=to_beaker,
+            func=HttpRequest(
+                field=field, follow_redirects=follow_redirects, retries=retries
+            ),
+            error_map=error_map,
+            whole_record=False,
+            allow_filter=False,
+        )
