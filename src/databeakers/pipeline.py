@@ -651,7 +651,8 @@ class Pipeline:
         """
         ids = self.beakers[beaker_name].delete(parent=parent, ids=ids)
         for edge in self._out_edges(beaker_name):
-            self.delete_from_beaker(edge.to_beaker, parent=ids)
+            for to_beaker in edge.out_beakers():
+                self.delete_from_beaker(to_beaker, parent=ids)
 
     def reset(self) -> list[str]:
         reset_list = []

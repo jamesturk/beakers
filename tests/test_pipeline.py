@@ -3,7 +3,7 @@ import pytest
 import itertools
 from databeakers.pipeline import Pipeline, ErrorType
 from databeakers.exceptions import InvalidGraph
-from databeakers.edges import Transform
+from databeakers.edges import Transform, Splitter
 from databeakers._models import RunMode
 from examples import Word, Sentence, fruits
 
@@ -429,3 +429,28 @@ def test_delete_forward_propagate_all(wc_pipeline):
     wc_pipeline.delete_from_beaker("word")
     assert len(wc_pipeline.beakers["word"]) == 0
     assert len(wc_pipeline.beakers["capitalized"]) == 0
+
+
+def test_delete_forward_propagate_through_splitter(wc_pipeline):
+    wc_pipeline.add_beaker("alpha", Word)
+    wc_pipeline.add_beaker("beta", Word)
+    wc_pipeline.add_splitter(
+        "word",
+        Splitter(
+            lambda x: x.word[0],
+            {
+                "a": Transform(name="a", func=capitalized, to_beaker="alpha"),
+                "b": Transform(name="b", func=capitalized, to_beaker="beta"),
+            },
+        ),
+    )
+    wc_pipeline.beakers["word"].add_item(Word(word="apple"), parent="sr:a", id_="123")
+    wc_pipeline.beakers["word"].add_item(Word(word="axe"), parent="sr:a", id_="555")
+    wc_pipeline.beakers["word"].add_item(Word(word="berry"), parent="sr:b", id_="999")
+    wc_pipeline.run(RunMode.waterfall)
+
+    assert len(wc_pipeline.beakers["alpha"]) == 2
+    assert len(wc_pipeline.beakers["beta"]) == 1
+    wc_pipeline.delete_from_beaker("word", ids=["123", "999"])
+    assert len(wc_pipeline.beakers["alpha"]) == 1
+    assert len(wc_pipeline.beakers["beta"]) == 0
