@@ -333,7 +333,10 @@ def peek(
                 title=f"{thing} ({len(rows)})", show_header=True, show_lines=False
             )
         for field in rows[0].keys():
-            t.add_column(field)
+            if field == "id":
+                t.add_column(field, min_width=36)
+            else:
+                t.add_column(field)
         for rec in rows:
             fields = [rec["id"]]
             for field, value in rec.items():
