@@ -351,6 +351,8 @@ class Pipeline:
         self.graph.add_node(splitter.name, node_type="split")
         self.graph.add_edge(from_beaker, splitter.name, edge=splitter)
         for out in splitter.splitter_map.values():
+            if out.to_beaker not in self.beakers:
+                raise InvalidGraph(f"{out.to_beaker} not found")
             self.graph.add_edge(
                 splitter.name,
                 out.to_beaker,
