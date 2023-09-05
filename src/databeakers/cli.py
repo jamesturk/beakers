@@ -281,7 +281,7 @@ def clear(
     else:
         beaker = ctx.obj.beakers[beaker_name]
         if typer.prompt(f"Clear {beaker_name} ({len(beaker)})? [y/N]") == "y":
-            beaker.reset()
+            beaker.delete()
             typer.secho(f"Cleared {beaker_name}", fg=typer.colors.GREEN)
 
 
